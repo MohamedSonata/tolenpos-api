@@ -1,0 +1,47 @@
+{
+  "kind": "collectionType",
+  "collectionName": "licenses",
+  "info": {
+    "singularName": "license",
+    "pluralName": "licenses",
+    "displayName": "License"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "licenseKey": {
+      "type": "string"
+    },
+    "maxSeats": {
+      "type": "integer"
+    },
+    "expiresAt": {
+      "type": "datetime"
+    },
+    "expirationType": {
+      "type": "enumeration",
+      "enum": [
+        "perpetual",
+        "expiring"
+      ]
+    },
+    "isActive": {
+      "type": "boolean",
+      "default": false
+    },
+    "seats": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::key-seat.key-seat",
+      "mappedBy": "license"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "licenses"
+    }
+  }
+}

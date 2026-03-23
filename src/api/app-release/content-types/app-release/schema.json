@@ -1,0 +1,125 @@
+{
+  "kind": "singleType",
+  "collectionName": "app_releases",
+  "info": {
+    "singularName": "app-release",
+    "pluralName": "app-releases",
+    "displayName": "AppRelease"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "version": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "regex": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "releaseDate": {
+      "type": "datetime",
+      "required": true
+    },
+    "platform": {
+      "type": "enumeration",
+      "required": true,
+      "enum": [
+        "windows",
+        "macos",
+        "linux"
+      ]
+    },
+    "architecture": {
+      "type": "enumeration",
+      "required": true,
+      "enum": [
+        "x64",
+        "arm64",
+        "x86"
+      ]
+    },
+    "releaseType": {
+      "type": "enumeration",
+      "required": true,
+      "default": "stable",
+      "enum": [
+        "stable",
+        "beta",
+        "alpha"
+      ]
+    },
+    "isLatest": {
+      "type": "boolean",
+      "default": false
+    },
+    "isCritical": {
+      "type": "boolean",
+      "default": false
+    },
+    "minVersion": {
+      "type": "string",
+      "regex": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "windowsDownloadUrl": {
+      "type": "string",
+      "required": true
+    },
+    "macOsDownloadUrl": {
+      "type": "string",
+      "required": true
+    },
+    "linuxDownloadUrl": {
+      "type": "string",
+      "required": true
+    },
+    "fileSize": {
+      "type": "biginteger",
+      "required": true
+    },
+    "fileName": {
+      "type": "string",
+      "required": true
+    },
+    "checksum": {
+      "type": "string",
+      "required": true
+    },
+    "checksumAlgorithm": {
+      "type": "enumeration",
+      "required": true,
+      "default": "sha256",
+      "enum": [
+        "sha256",
+        "sha512",
+        "md5"
+      ]
+    },
+    "releaseNotes": {
+      "type": "richtext",
+      "pluginOptions": {
+        "i18n": {
+          "localized": true
+        }
+      }
+    },
+    "downloadCount": {
+      "type": "integer",
+      "default": 0
+    },
+    "isActive": {
+      "type": "boolean",
+      "default": true
+    },
+    "deprecatedAt": {
+      "type": "datetime"
+    },
+    "requiredUpdate": {
+      "type": "boolean",
+      "default": false
+    },
+    "gracePeriodHours": {
+      "type": "integer"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "kind": "collectionType",
+  "collectionName": "key_seats",
+  "info": {
+    "singularName": "key-seat",
+    "pluralName": "key-seats",
+    "displayName": "Key-Seat"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "machineUUID": {
+      "type": "string"
+    },
+    "telemetry": {
+      "type": "json"
+    },
+    "isActive": {
+      "type": "boolean",
+      "default": false
+    },
+    "license": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::license.license",
+      "inversedBy": "seats"
+    }
+  }
+}

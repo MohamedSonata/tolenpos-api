@@ -1,0 +1,55 @@
+{
+  "kind": "collectionType",
+  "collectionName": "app_release_change_logs",
+  "info": {
+    "singularName": "app-release-change-log",
+    "pluralName": "app-release-change-logs",
+    "displayName": "AppReleaseChangeLog"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+     "version": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "regex": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "releaseDate": {
+      "type": "datetime",
+      "required": true
+    },
+    "platform": {
+      "type": "enumeration",
+      "enum": ["windows", "macos", "linux"],
+      "required": true
+    },
+    "architecture": {
+      "type": "enumeration",
+      "enum": ["x64", "arm64", "x86"],
+      "required": true
+    },
+    "releaseType": {
+      "type": "enumeration",
+      "enum": ["stable", "beta", "alpha"],
+      "default": "stable",
+      "required": true
+    },
+    "isLatest": {
+      "type": "boolean",
+      "default": false
+    },
+    "changelogs": {
+      "type": "component",
+      "component": "release-change-log-i-tems.release-change-log-i-tems",
+      "repeatable": true
+    },
+    "releaseNotes": {
+      "type": "component",
+      "component": "release-change-log-i-tems.release-change-log-i-tems",
+      "repeatable": true
+    }
+  }
+}

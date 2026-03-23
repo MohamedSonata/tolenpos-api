@@ -1,0 +1,32 @@
+{
+  "collectionName": "components_release_change_log_i_tems_release_change_log_i_tems",
+  "info": {
+    "displayName": "releaseChangeLogITems"
+  },
+  "options": {},
+  "attributes": {
+    "type": {
+      "type": "enumeration",
+      "enum": ["feature", "bugfix", "improvement", "security", "breaking"],
+      "required": true
+    },
+    "title": {
+      "type": "string",
+      "required": true,
+      "pluginOptions": {
+        "i18n": {
+          "localized": true
+        }
+      }
+    },
+    "description": {
+      "type": "text",
+      "pluginOptions": {
+        "i18n": {
+          "localized": true
+        }
+      }
+    }
+  },
+  "config": {}
+}

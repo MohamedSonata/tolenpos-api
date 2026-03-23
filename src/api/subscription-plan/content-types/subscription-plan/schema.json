@@ -1,0 +1,100 @@
+{
+  "kind": "collectionType",
+  "collectionName": "subscription_plans",
+  "info": {
+    "singularName": "subscription-plan",
+    "pluralName": "subscription-plans",
+    "displayName": "subscription-plan"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "pluginOptions": {
+        "i18n": {
+          "localized": true
+        }
+      },
+      "required": true
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "name",
+      "required": true
+    },
+    "price": {
+      "type": "decimal",
+      "required": true,
+      "default": 0
+    },
+    "currency": {
+      "type": "string",
+      "default": "USD",
+      "required": true
+    },
+    "billingPeriod": {
+      "type": "enumeration",
+      "required": true,
+      "default": "monthly",
+      "enum": [
+        "monthly",
+        "yearly",
+        "lifetime"
+      ]
+    },
+    "description": {
+      "type": "text",
+      "pluginOptions": {
+        "i18n": {
+          "localized": true
+        }
+      }
+    },
+    "isRecommended": {
+      "type": "boolean",
+      "default": false
+    },
+    "isPopular": {
+      "type": "boolean",
+      "default": false
+    },
+    "sortOrder": {
+      "type": "integer",
+      "default": 0
+    },
+    "maxRegisters": {
+      "type": "integer",
+      "default": 1
+    },
+    "isUnlimitedRegisters": {
+      "type": "boolean",
+      "default": false
+    },
+    "maxProducts": {
+      "type": "integer",
+      "default": 500
+    },
+    "isUnlimitedProducts": {
+      "type": "boolean",
+      "default": false
+    },
+    "stripeProductId": {
+      "type": "string"
+    },
+    "stripePriceId": {
+      "type": "string"
+    },
+    "isActive": {
+      "type": "boolean",
+      "default": true
+    },
+    "features": {
+      "type": "component",
+      "component": "plan-features.plan-features",
+      "repeatable": true
+    }
+  }
+}
