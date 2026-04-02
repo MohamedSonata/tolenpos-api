@@ -6,6 +6,7 @@ import crypto from 'crypto';
 export interface LicenseKeyData {
   expirationType: 'perpetual' | 'expiring';
   maxSeats: number;
+  // planSubscriptionType: 'FreeTrial'|'Pro' | 'Enterprise';
   userId: string;
   expiresAt?: string;
   timestamp: number;

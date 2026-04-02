@@ -34,9 +34,13 @@ export function setupConnectionHandlers(
       return;
     }
 
-    // Get user info from socket
+    // Get user info and client type from socket
     const userId = (socket as any).userID;
-    strapi.log.warn(`[ConnectionHandler]  New connection User ID: ${userId}`);
+    const clientType = (socket as any).clientType;
+    const machineUUID = (socket as any).machineUUID;
+    const keySeatDocumentId = (socket as any).keySeatDocumentId;
+    
+    strapi.log.warn(`[ConnectionHandler] New connection User ID: ${userId}, Client Type: ${clientType}`);
     
     if (userId) {
       // Determine user role and document ID
@@ -46,17 +50,25 @@ export function setupConnectionHandlers(
         // Store user info in socket data for easy access
         socket.data = {
           userId,
-
           documentId: userInfo.documentId,
+          clientType,
+          machineUUID,
+          keySeatDocumentId,
         };
-        strapi.log.warn(`[ConnectionHandler]  New connection User info: ${JSON.stringify(socket.data)}`);
+        strapi.log.warn(`[ConnectionHandler] New connection User info: ${JSON.stringify(socket.data)}`);
 
-        // Map user to socket in Redis (Requirement 6.2)
-        await mapUserToSocket(socket, userInfo);
-
- 
+        // Map user to socket based on client type
+        if (clientType === 'pos' && keySeatDocumentId) {
+          // Update key-seat socket ID for POS clients
+          await updateKeySeatSocketId(socket, keySeatDocumentId, strapi);
+          
+          // Send current plan to POS on connection
+          await sendCurrentPlanToPOS(socket, userId, strapi);
+        } else {
+          // Update user socket ID for mobile clients
+          await mapUserToSocket(socket, userInfo);
+        }
       }
-  
     }
 
     // Handle disconnection
@@ -92,6 +104,30 @@ async function getUserInfo(
   } catch (error) {
     strapi.log.error(`[ConnectionHandler] Error getting user info: ${error}`);
     return null;
+  }
+}
+
+/**
+ * Updates the socket ID in the key-seat table for POS clients
+ */
+async function updateKeySeatSocketId(
+  socket: Socket,
+  keySeatDocumentId: string,
+  strapi: Core.Strapi
+): Promise<void> {
+  try {
+    // Update the socket ID directly using the document ID
+    await strapi.documents('api::key-seat.key-seat').update({
+      documentId: keySeatDocumentId,
+      status: 'published',
+      data: {
+        
+        userSocketId: socket.id,
+      },
+    });
+    strapi.log.info(`[ConnectionHandler] Updated key-seat socket ID for key-seat ${keySeatDocumentId}: ${socket.id}`);
+  } catch (error) {
+    strapi.log.error(`[ConnectionHandler] Error updating key-seat socket ID: ${error}`);
   }
 }
 
@@ -144,18 +180,201 @@ async function handleDisconnection(
 
   try {
     // Get user info from socket data
-    const { role, documentId } = socket.data || {};
+    const { documentId, clientType, keySeatDocumentId } = socket.data || {};
 
     if (!documentId) {
       return;
     }
 
-  
-
- 
-  
+    // Clear socket ID based on client type
+    if (clientType === 'pos' && keySeatDocumentId) {
+      // Clear key-seat socket ID for POS clients
+      await clearKeySeatSocketId(keySeatDocumentId, socket.id, strapi);
+    } else if (clientType === 'mobile') {
+      // Clear user socket ID for mobile clients
+      await clearUserSocketId(documentId, strapi);
+    }
   } catch (error) {
     strapi.log.error(`[ConnectionHandler] Error handling disconnection: ${error}`);
+  }
+}
+
+/**
+ * Clears the socket ID from key-seat table for POS clients
+ */
+async function clearKeySeatSocketId(
+  keySeatDocumentId: string,
+  socketId: string,
+  strapi: Core.Strapi
+): Promise<void> {
+  try {
+    // Verify the socket ID matches before clearing (prevent race conditions)
+    const keySeat = await strapi.documents('api::key-seat.key-seat').findOne({
+      documentId: keySeatDocumentId,
+    });
+
+    if (keySeat && keySeat.userSocketId === socketId) {
+      await strapi.documents('api::key-seat.key-seat').update({
+        documentId: keySeatDocumentId,
+        data: {
+          userSocketId: null,
+        },
+      });
+      strapi.log.info(`[ConnectionHandler] Cleared key-seat socket ID for key-seat ${keySeatDocumentId}`);
+    } else {
+      strapi.log.warn(`[ConnectionHandler] Socket ID mismatch or already cleared for key-seat ${keySeatDocumentId}`);
+    }
+  } catch (error) {
+    strapi.log.error(`[ConnectionHandler] Error clearing key-seat socket ID: ${error}`);
+  }
+}
+
+/**
+ * Clears the socket ID from user table for mobile clients
+ */
+async function clearUserSocketId(
+  userDocumentId: string,
+  strapi: Core.Strapi
+): Promise<void> {
+  try {
+    await strapi.documents('plugin::users-permissions.user').update({
+      documentId: userDocumentId,
+      data: {
+        socketId: null,
+      },
+      status: 'published',
+    });
+    strapi.log.info(`[ConnectionHandler] Cleared user socket ID for user ${userDocumentId}`);
+  } catch (error) {
+    strapi.log.error(`[ConnectionHandler] Error clearing user socket ID: ${error}`);
+  }
+}
+
+/**
+ * Sends current plan information to POS client on connection
+ * This allows POS to sync with server when online
+ */
+async function sendCurrentPlanToPOS(
+  socket: Socket,
+  userDocumentId: string,
+  strapi: Core.Strapi
+): Promise<void> {
+  try {
+    // Fetch user's current plan
+    const user = await strapi.documents('plugin::users-permissions.user').findOne({
+      documentId: userDocumentId,
+      fields: ['planType']
+    });
+
+    if (user && user.planType) {
+      const planFeatures = getPlanFeatures(user.planType);
+      
+      socket.emit('plan:current', {
+        planType: user.planType,
+        features: planFeatures,
+        syncedAt: new Date().toISOString()
+      });
+      
+      strapi.log.info(`[ConnectionHandler] Sent current plan to POS: ${user.planType}`);
+    }
+  } catch (error) {
+    strapi.log.error(`[ConnectionHandler] Error sending plan to POS: ${error}`);
+  }
+}
+
+/**
+ * Gets feature set for a given plan type
+ */
+function getPlanFeatures(planType: string): Record<string, any> {
+  const features: Record<string, Record<string, any>> = {
+    'FreeTrial': {
+      maxProducts: 100,
+      maxRegisters: 1,
+      advancedReporting: false,
+      multiLocation: false,
+      inventoryManagement: true,
+      basicReports: true,
+      duration: '30 days'
+    },
+    'Pro': {
+      maxProducts: 5000,
+      maxRegisters: 3,
+      advancedReporting: true,
+      multiLocation: false,
+      inventoryManagement: true,
+      basicReports: true,
+      customerManagement: true,
+      emailSupport: true
+    },
+    'Enterprise': {
+      maxProducts: -1,  // unlimited
+      maxRegisters: -1,  // unlimited
+      advancedReporting: true,
+      multiLocation: true,
+      inventoryManagement: true,
+      basicReports: true,
+      customerManagement: true,
+      prioritySupport: true,
+      customIntegrations: true,
+      dedicatedAccountManager: true
+    }
+  };
+
+  return features[planType] || features['FreeTrial'];
+}
+
+/**
+ * Notifies all POS machines for a user about plan changes
+ * Call this when a user upgrades/downgrades their plan
+ */
+export async function notifyPOSMachinesOfPlanChange(
+  userDocumentId: string,
+  newPlanType: string,
+  io: SocketIOServer,
+  strapi: Core.Strapi
+): Promise<void> {
+  try {
+    // Find all licenses for the user
+    const licenses = await strapi.documents('api::license.license').findMany({
+      filters: {
+        user: {
+          documentId: userDocumentId,
+        },
+        isActive: true,
+      },
+      populate: ['seats'],
+    });
+
+    const planFeatures = getPlanFeatures(newPlanType);
+    let notifiedCount = 0;
+
+    // Emit to all connected POS machines
+    for (const license of licenses) {
+      // Update license plan type
+      await strapi.documents('api::license.license').update({
+        documentId: license.documentId,
+        data: { planSubscriptionType: newPlanType as 'FreeTrial' | 'Pro' | 'Enterprise' },
+      });
+
+      // Notify connected POS machines
+      if (license.seats) {
+        for (const seat of license.seats) {
+          if (seat.isActive && seat.userSocketId) {
+            io.to(seat.userSocketId).emit('plan:updated', {
+              planType: newPlanType,
+              features: planFeatures,
+              effectiveDate: new Date().toISOString()
+            });
+            notifiedCount++;
+            strapi.log.info(`[ConnectionHandler] Notified POS machine ${seat.machineUUID} of plan change`);
+          }
+        }
+      }
+    }
+
+    strapi.log.info(`[ConnectionHandler] Plan change notification sent to ${notifiedCount} POS machines`);
+  } catch (error) {
+    strapi.log.error(`[ConnectionHandler] Error notifying POS machines of plan change: ${error}`);
   }
 }
 

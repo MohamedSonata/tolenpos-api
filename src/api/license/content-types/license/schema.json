@@ -42,6 +42,14 @@
       "relation": "manyToOne",
       "target": "plugin::users-permissions.user",
       "inversedBy": "licenses"
+    },
+    "planSubscriptionType": {
+      "type": "enumeration",
+      "enum": [
+        "FreeTrial",
+        "Pro",
+        "Enterprise"
+      ]
     }
   }
 }

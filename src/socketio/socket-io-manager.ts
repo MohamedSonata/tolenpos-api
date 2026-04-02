@@ -292,6 +292,34 @@ export class SocketEventManager {
     });
   }
 
+  /**
+   * Checks if a socket is authenticated as a POS client
+   */
+  public isPOSClient(socket: Socket): boolean {
+    return (socket as any).clientType === 'pos';
+  }
+
+  /**
+   * Checks if a socket is authenticated as a mobile client
+   */
+  public isMobileClient(socket: Socket): boolean {
+    return (socket as any).clientType === 'mobile';
+  }
+
+  /**
+   * Gets the machine UUID from a POS socket
+   */
+  public getMachineUUID(socket: Socket): string | undefined {
+    return (socket as any).machineUUID;
+  }
+
+  /**
+   * Gets the client type from a socket
+   */
+  public getClientType(socket: Socket): 'mobile' | 'pos' | undefined {
+    return (socket as any).clientType;
+  }
+
   // ================================
   // UTILITY FUNCTIONS
   // ================================

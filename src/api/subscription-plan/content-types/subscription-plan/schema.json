@@ -75,7 +75,7 @@
     },
     "maxProducts": {
       "type": "integer",
-      "default": 500
+      "default": 100
     },
     "isUnlimitedProducts": {
       "type": "boolean",
@@ -95,6 +95,14 @@
       "type": "component",
       "component": "plan-features.plan-features",
       "repeatable": true
+    },
+    "planType": {
+      "type": "enumeration",
+      "enum": [
+        "Starter",
+        "Professional",
+        "Enterprise"
+      ]
     }
   }
 }

@@ -14,6 +14,9 @@ import { SocketIOErrorEvents } from '../error_events.constants';
 interface AuthenticatedSocket extends Socket {
   userID?: string;
   strategeyName?: string;
+  clientType?: 'mobile' | 'pos';
+  machineUUID?: string;
+  keySeatDocumentId?: string;
   // handshake is inherited from Socket
   [key: string]: any;
 }
@@ -42,6 +45,90 @@ const socketService = ({ strapi }: { strapi: Core.Strapi }) => {
   };
 
   /**
+   * Authenticates POS app connection using API key token and machine UUID.
+   * Validates against key-seat and license records.
+   *
+   * @param socket - The Socket.IO socket instance.
+   * @param token - The API key/license key.
+   * @param userDocumentId - The user document ID.
+   * @param machineUUID - The machine UUID.
+   * @returns Promise resolving to true if authenticated, false otherwise.
+   */
+  const authenticatePOSConnection = async (
+    socket: AuthenticatedSocket,
+    token: string,
+    userDocumentId: string,
+    machineUUID: string
+  ): Promise<boolean> => {
+    try {
+      console.log("POS Authentication attempt:", { token, userDocumentId, machineUUID });
+
+      // Find the license by license key
+      const license = await strapi.documents('api::license.license').findFirst({
+        filters: {
+          licenseKey: token,
+          isActive: true,
+        },
+        populate: ['user', 'seats'],
+      });
+
+      if (!license) {
+        console.log("License not found or inactive");
+        return false;
+      }
+
+      // Check if license is expired (for expiring licenses)
+      if (license.expirationType === 'expiring' && license.expiresAt) {
+        const expirationDate = new Date(license.expiresAt);
+        if (expirationDate < new Date()) {
+          console.log("License has expired");
+          return false;
+        }
+      }
+
+      // Verify the user owns this license
+      if (license.user?.documentId !== userDocumentId) {
+        console.log("User does not own this license");
+        return false;
+      }
+
+      // Find or validate the key-seat for this machine
+      const keySeat = await strapi.documents('api::key-seat.key-seat').findFirst({
+        filters: {
+          machineUUID: machineUUID,
+          license: {
+            documentId: license.documentId,
+          },
+          isActive: true,
+        },
+      });
+
+      if (!keySeat) {
+        console.log("Key seat not found or inactive for this machine");
+        return false;
+      }
+
+      // Authentication successful - set socket properties
+      socket.userID = userDocumentId;
+      socket.strategeyName = "pos-api-key";
+      socket.clientType = "pos";
+      socket.machineUUID = machineUUID;
+      socket.keySeatDocumentId = keySeat.documentId; // Store for easy access
+
+      console.log("POS authentication successful:", {
+        userID: socket.userID,
+        machineUUID: socket.machineUUID,
+        keySeatId: keySeat.documentId,
+      });
+
+      return true;
+    } catch (error) {
+      console.error("POS authentication error:", error);
+      return false;
+    }
+  };
+
+  /**
    * Validate User Authentication Token.
    * Associates the Socket object with new params (user:UserID, strategyName: "users-permissions").
    * If not valid: Emits UnauthorizedError event and disconnects the user.
@@ -54,26 +141,55 @@ const socketService = ({ strapi }: { strapi: Core.Strapi }) => {
   ): Promise<boolean> => {
     let payload: JwtPayload | undefined;
     try {
-      // Verify User Credentials
-      // Type assertion for handshake.query.token
-      const token = (socket.handshake.query as any).token as string;
-      console.log("User Token Sent at Connection From User : ",token);
-      payload = await verify(token);
-      console.log(
-        "VerifiedUserCredentials",
-        payload,
-        "Line(22)=>src/socketio/services/index.ts"
-      );
-      if (payload) {
-        // Save the User ID to the socket connection object
-        socket.userID = payload.userId;
-        if (socket.userID) {
-          // Save the strategyName to the socket connection object
-          socket.strategeyName = "users-permissions";
+      // Get authentication parameters from handshake query
+      const query = socket.handshake.query as any;
+      const token = query.token as string;
+      const userDocumentId = query.userDocumentId as string;
+      const machineUUID = query.machineUUID as string;
+
+      console.log("User Token Sent at Connection From User:", token);
+      console.log("Connection params:", { userDocumentId, machineUUID });
+
+      // Determine authentication method based on provided parameters
+      // POS app sends: token (API key), userDocumentId, and machineUUID
+      // Mobile app sends: token (JWT) only
+      if (machineUUID && userDocumentId) {
+        // POS app authentication
+        console.log("Attempting POS authentication");
+        const authenticated = await authenticatePOSConnection(
+          socket,
+          token,
+          userDocumentId,
+          machineUUID
+        );
+
+        if (authenticated) {
+          return true;
         }
-        return true;
+        // If POS auth fails, throw error to trigger error emission
+        throw new Error("POS authentication failed");
+      } else {
+        // Mobile app JWT authentication
+        console.log("Attempting JWT authentication");
+        payload = await verify(token);
+        console.log(
+          "VerifiedUserCredentials",
+          payload,
+          "Line(22)=>src/socketio/services/index.ts"
+        );
+        
+        if (payload) {
+          // Save the User ID to the socket connection object
+          socket.userID = payload.userId;
+          if (socket.userID) {
+            // Save the strategyName to the socket connection object
+            socket.strategeyName = "users-permissions";
+            socket.clientType = "mobile";
+          }
+          return true;
+        }
+        return false;
       }
-      return false;
     } catch (error) {
       // Emit UnauthorizedError event for notifying the user
       socket.emit(SocketIOErrorEvents.UnauthorizedError, {
@@ -109,6 +225,7 @@ const socketService = ({ strapi }: { strapi: Core.Strapi }) => {
 
   return {
     authenticateUserConnection,
+    authenticatePOSConnection,
     isTokenExpired,
     verify
   };

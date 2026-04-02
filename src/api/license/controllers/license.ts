@@ -85,6 +85,7 @@ export default factories.createCoreController('api::license.license', ({ strapi 
         const licenseKeyData: LicenseKeyData = {
           expirationType: data.expirationType,
           maxSeats: data.maxSeats,
+       
           userId: data.userDocumentId,
           expiresAt: data.expiresAt,
           timestamp: Date.now()
@@ -98,6 +99,7 @@ export default factories.createCoreController('api::license.license', ({ strapi 
             expirationType: data.expirationType,
             maxSeats: data.maxSeats,
             expiresAt: data.expiresAt,
+            planSubscriptionType: data.planType,
             user: data.userDocumentId,
             licenseKey,
             isActive: false
@@ -151,7 +153,7 @@ export default factories.createCoreController('api::license.license', ({ strapi 
       }
 
       // Decrypt and validate the license key
-      let decryptedData;
+      let decryptedData: LicenseKeyData | null;
       try {
         decryptedData = decryptLicenseKey(licenseKey);
       } catch (error) {
@@ -206,7 +208,7 @@ export default factories.createCoreController('api::license.license', ({ strapi 
       }
 
       // Extract user documentId (handle both populated and non-populated cases)
-      let userDocumentId;
+      let userDocumentId: string | undefined;
       if (typeof license.user === 'object' && license.user !== null) {
         userDocumentId = license.user.documentId;
       } else if (typeof license.user === 'string') {
@@ -289,7 +291,7 @@ export default factories.createCoreController('api::license.license', ({ strapi 
       // Check if this machine is already activated for THIS specific license
       const existingSeatForThisLicense = license.seats?.find(seat => seat.machineUUID === machineUUID);
 
-      let keySeat;
+      let keySeat: any;
       
       if (existingSeatForThisLicense) {
         // This machine is already registered for THIS license - reactivate it
@@ -328,6 +330,8 @@ export default factories.createCoreController('api::license.license', ({ strapi 
             message: 'License reactivated successfully',
             license: {
               documentId: updatedLicense.documentId,
+              userDocumentId: userDocumentId,
+              planSubscriptionType: license.planSubscriptionType,
               licenseKey: updatedLicense.licenseKey,
               isActive: updatedLicense.isActive,
               expirationType: updatedLicense.expirationType,
@@ -387,12 +391,14 @@ export default factories.createCoreController('api::license.license', ({ strapi 
         timestamp: new Date().toISOString()
       });
 
-      // Return success response
+      // Return success response with planSubscriptionType for offline POS apps
       return ctx.send({
         data: {
           message: 'License activated successfully',
           license: {
             documentId: updatedLicense.documentId,
+            userDocumentId: userDocumentId,
+            planSubscriptionType: license.planSubscriptionType,
             licenseKey: updatedLicense.licenseKey,
             isActive: updatedLicense.isActive,
             expirationType: updatedLicense.expirationType,

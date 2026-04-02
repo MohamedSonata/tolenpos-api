@@ -570,6 +570,7 @@ export interface ApiKeySeatKeySeat extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    userSocketId: Schema.Attribute.String;
   };
 }
 
@@ -598,6 +599,9 @@ export interface ApiLicenseLicense extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     maxSeats: Schema.Attribute.Integer;
+    planSubscriptionType: Schema.Attribute.Enumeration<
+      ['FreeTrial', 'Pro', 'Enterprise']
+    >;
     publishedAt: Schema.Attribute.DateTime;
     seats: Schema.Attribute.Relation<'oneToMany', 'api::key-seat.key-seat'>;
     updatedAt: Schema.Attribute.DateTime;
@@ -653,7 +657,7 @@ export interface ApiSubscriptionPlanSubscriptionPlan
       'api::subscription-plan.subscription-plan'
     > &
       Schema.Attribute.Private;
-    maxProducts: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<500>;
+    maxProducts: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<100>;
     maxRegisters: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<1>;
     name: Schema.Attribute.String &
       Schema.Attribute.Required &
@@ -662,6 +666,9 @@ export interface ApiSubscriptionPlanSubscriptionPlan
           localized: true;
         };
       }>;
+    planType: Schema.Attribute.Enumeration<
+      ['Starter', 'Professional', 'Enterprise']
+    >;
     price: Schema.Attribute.Decimal &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<0>;
