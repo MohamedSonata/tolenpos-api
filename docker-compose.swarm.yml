@@ -1,7 +1,7 @@
 services:
   strapi:
     build: .
-    image: mosonata/tolen-pos-api:v1
+    image: mosonata/tolen-pos-api
     restart: unless-stopped
     env_file: ./.env.production
    # We comment this line because we passing the env from envFile paramter
