@@ -180,7 +180,8 @@ const socketService = ({ strapi }: { strapi: Core.Strapi }) => {
         
         if (payload) {
           // Save the User ID to the socket connection object
-          socket.userID = payload.userId;
+          // JWT payload uses 'id' field, not 'userId'
+          socket.userID = payload.id || payload.userId;
           if (socket.userID) {
             // Save the strategyName to the socket connection object
             socket.strategeyName = "users-permissions";

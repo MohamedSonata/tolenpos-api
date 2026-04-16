@@ -106,10 +106,128 @@ interface UpdateUserDriverLocationEventBody {
   query: any;
 }
 
+// POS Seat Interfaces
+
+// Business Data Structures
+interface LastOrderData {
+  receiptNumber: string;
+  total: number;
+  itemCount: number;
+  paymentMethod: string;
+  status: string;
+  createdAt: string;
+  items?: any[];
+  customer?: any;
+}
+
+interface KPISummaryData {
+  totalSales: number;
+  transactionCount: number;
+  averageTransactionValue: number;
+  period: string;
+  lastUpdated: string;
+}
+
+interface ExpenseData {
+  id: string;
+  title: string;
+  amount: number;
+  category: string;
+  paymentMethod: string;
+  expenseDate: string;
+  isUrgent: boolean;
+}
+
+// Telemetry Data Structure
+interface TelemetryData {
+  // Network status
+  networkStatus?: 'online' | 'offline';
+  lastSyncTime?: string;
+  
+  // Business data (new fields)
+  lastOrder?: LastOrderData | null;
+  kpiSummary?: KPISummaryData | null;
+  expenses?: ExpenseData[];
+  
+  // System information (optional legacy fields)
+  osVersion?: string;
+  appVersion?: string;
+  cpuUsage?: number;
+  memoryUsage?: number;
+  diskSpace?: number;
+  
+  // Additional business metrics (optional legacy fields)
+  transactionsToday?: number;
+  lastTransactionTime?: string;
+  cashDrawerStatus?: 'open' | 'closed';
+  printerStatus?: 'online' | 'offline' | 'error';
+  
+  // Metadata (added by backend)
+  lastUpdated?: string;
+  
+  // Allow additional custom fields
+  [key: string]: any;
+}
+
+interface SeatUpdatePayload {
+  realtimeTelemetry: TelemetryData;  // Real-time telemetry updates from POS
+}
+
+interface SeatSubscribePayload {
+  // Empty for now, may include filters in future
+}
+
+interface SeatUpdatedNotification {
+  machineUUID: string;
+  realtimeTelemetry: TelemetryData;  // Real-time telemetry data
+  isActive: boolean;
+  updatedAt: string;
+  licenseDocumentId: string;
+}
+
+// Telemetry Query Interfaces (Real-time queries from Mobile to POS)
+
+interface TelemetryQueryFilters {
+  startDate?: string;
+  endDate?: string;
+  dataTypes?: string[]; // ['orders', 'inventory', 'sales', 'expenses']
+}
+
+interface TelemetryQueryRequest {
+  requestId: string; // Unique ID for tracking request/response
+  keySeatDocumentId: string;
+  filters: TelemetryQueryFilters;
+}
+
+interface TelemetryQueryResponse {
+  requestId: string;
+  keySeatDocumentId: string;
+  telemetryData: Record<string, any>;
+  mobileSocketId: string; // Socket ID of requesting mobile app
+  timestamp?: string;
+  success?: boolean;
+}
+
+interface TelemetryQueryError {
+  requestId: string;
+  keySeatDocumentId: string;
+  error: string;
+  fallbackAvailable: boolean;
+}
+
+interface TelemetryQueryResult {
+  requestId: string;
+  keySeatDocumentId: string;
+  source: 'realtime' | 'snapshot' | 'unavailable';
+  data: Record<string, any>;
+  timestamp: string;
+  success: boolean;
+  warning?: string;
+  snapshotAge?: number; // Hours since snapshot was taken
+}
+
 // Export all legacy interfaces
 export {
- 
-
   NotificationBody,
   NotificationBodyData,
   LatLong,
@@ -118,4 +236,16 @@ export {
   NotificationType,
   SocketEventAction,
   DriverArrivalRouteEventBody,
+  SeatUpdatePayload,
+  SeatSubscribePayload,
+  SeatUpdatedNotification,
+  TelemetryData,
+  LastOrderData,
+  KPISummaryData,
+  ExpenseData,
+  TelemetryQueryFilters,
+  TelemetryQueryRequest,
+  TelemetryQueryResponse,
+  TelemetryQueryError,
+  TelemetryQueryResult,
 }

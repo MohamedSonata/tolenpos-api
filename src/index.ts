@@ -2,6 +2,7 @@
 
 import { Core } from "@strapi/strapi";
 import { initializeSocketIO } from "./socketio";
+import fireBaseConfig from "./fcm/fcm_config";
 
 export default {
   /**
@@ -21,5 +22,11 @@ export default {
    * This gives you an opportunity to set up your data model,
    * run jobs, or perform some special logic.
    */
-  bootstrap(/* { strapi }: { strapi: Core.Strapi } */) {},
+  bootstrap( { strapi }: { strapi: Core.Strapi } ) {
+      fireBaseConfig({ strapi }).initFirebaseAdmin();
+      
+      // Note: Cron jobs are now managed by Strapi's native cron system
+      // See config/cron-tasks.ts for cron job configuration
+      strapi.log.info("[Bootstrap] Strapi cron jobs will be initialized automatically");
+  },
 };

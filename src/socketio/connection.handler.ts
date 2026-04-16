@@ -8,6 +8,8 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import type { Core } from '@strapi/strapi';
 
 import authenticateUserConnection from '../socketio/services';
+import { setupSeatUpdateHandlers } from './handlers/seat-update.handler';
+import { setupTelemetryQueryHandlers } from './handlers/telemetry-query.handler';
 
 // Constants
 const USER_SOCKET_TTL = 86400; // 24 hours in seconds
@@ -62,12 +64,18 @@ export function setupConnectionHandlers(
           // Update key-seat socket ID for POS clients
           await updateKeySeatSocketId(socket, keySeatDocumentId, strapi);
           
-          // Send current plan to POS on connection
-          await sendCurrentPlanToPOS(socket, userId, strapi);
+          // Send current plan to POS on connection (use documentId, not userId)
+          await sendCurrentPlanToPOS(socket, userInfo.documentId, strapi);
         } else {
           // Update user socket ID for mobile clients
           await mapUserToSocket(socket, userInfo);
         }
+
+        // Set up seat update handlers AFTER socket.data is populated
+        setupSeatUpdateHandlers(socket, strapi, io);
+        
+        // Set up telemetry query handlers
+        setupTelemetryQueryHandlers(socket, strapi, io);
       }
     }
 
@@ -84,16 +92,29 @@ export function setupConnectionHandlers(
  */
 async function getUserInfo(
   strapi: Core.Strapi,
-  userId: string
+  userId: string | number
 ): Promise<{ role: 'authenticated' | 'none'; documentId: string } | null> {
   try {
-    // First check if user is a driver
-    const user = await strapi.documents('plugin::users-permissions.user').findFirst({
-      filters: {
-        documentId:  userId ,
-      },
-      fields: ['documentId'],
-    });
+    // Try to find user by id (numeric) or documentId (string)
+    let user;
+    
+    if (typeof userId === 'number' || !isNaN(Number(userId))) {
+      // If userId is numeric, search by id field
+      user = await strapi.documents('plugin::users-permissions.user').findFirst({
+        filters: {
+          id: Number(userId),
+        },
+        fields: ['id', 'documentId'],
+      });
+    } else {
+      // If userId is a string (documentId), search by documentId
+      user = await strapi.documents('plugin::users-permissions.user').findFirst({
+        filters: {
+          documentId: userId,
+        },
+        fields: ['id', 'documentId'],
+      });
+    }
 
     if (user) {
       return { role: 'authenticated', documentId: user.documentId };
@@ -216,6 +237,7 @@ async function clearKeySeatSocketId(
     if (keySeat && keySeat.userSocketId === socketId) {
       await strapi.documents('api::key-seat.key-seat').update({
         documentId: keySeatDocumentId,
+          status:'published',
         data: {
           userSocketId: null,
         },

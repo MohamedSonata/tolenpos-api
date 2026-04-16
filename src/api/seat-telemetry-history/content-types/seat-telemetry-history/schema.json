@@ -1,0 +1,36 @@
+{
+  "kind": "collectionType",
+  "collectionName": "seat_telemetry_histories",
+  "info": {
+    "singularName": "seat-telemetry-history",
+    "pluralName": "seat-telemetry-histories",
+    "displayName": "Seat Telemetry History",
+    "description": "Historical snapshots of POS seat telemetry data"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "keySeat": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::key-seat.key-seat",
+      "inversedBy": "telemetryHistory"
+    },
+    "telemetryData": {
+      "type": "json",
+      "required": true
+    },
+    "capturedAt": {
+      "type": "datetime",
+      "required": true
+    },
+    "snapshotType": {
+      "type": "enumeration",
+      "enum": ["realtime", "hourly", "daily"],
+      "default": "realtime",
+      "required": true
+    }
+  }
+}

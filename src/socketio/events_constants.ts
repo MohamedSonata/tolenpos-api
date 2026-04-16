@@ -172,4 +172,63 @@ export class SocketIOEvents {
    * Event name for ride data not found Process to Customer.
    */
   static readonly EmitRideDataNotFound = "ride:dataNotFound";
+
+  // POS Seat Events Section
+
+  /**
+   * Event emitted by POS app to update seat telemetry data
+   */
+  static readonly OnSeatUpdate = "seat:update";
+
+  /**
+   * Event emitted to POS app confirming successful seat update
+   */
+  static readonly EmitSeatUpdateSuccess = "seat:update:success";
+
+  /**
+   * Event emitted by mobile app to subscribe to seat updates
+   */
+  static readonly OnSeatSubscribe = "seat:subscribe";
+
+  /**
+   * Event emitted to mobile app confirming subscription
+   */
+  static readonly EmitSeatSubscribeSuccess = "seat:subscribe:success";
+
+  /**
+   * Event emitted to subscribed mobile apps when seat data changes
+   */
+  static readonly EmitSeatUpdated = "seat:updated";
+
+  /**
+   * Event emitted by mobile app to unsubscribe from seat updates
+   */
+  static readonly OnSeatUnsubscribe = "seat:unsubscribe";
+
+  // Telemetry Query Events (Real-time queries from Mobile to POS)
+
+  /**
+   * Event emitted by mobile app to request telemetry data from POS device
+   */
+  static readonly OnTelemetryQuery = "seat:telemetry:query";
+
+  /**
+   * Event emitted to POS device to forward telemetry query request
+   */
+  static readonly EmitTelemetryQueryRequest = "seat:telemetry:query:request";
+
+  /**
+   * Event emitted by POS device with telemetry query response
+   */
+  static readonly OnTelemetryQueryResponse = "seat:telemetry:query:response";
+
+  /**
+   * Event emitted to mobile app with telemetry query result (realtime or snapshot)
+   */
+  static readonly EmitTelemetryQueryResponse = "seat:telemetry:query:result";
+
+  /**
+   * Event emitted to mobile app when telemetry query fails or times out
+   */
+  static readonly EmitTelemetryQueryError = "seat:telemetry:query:error";
 }

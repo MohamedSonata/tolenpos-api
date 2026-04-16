@@ -297,6 +297,7 @@ export default factories.createCoreController('api::license.license', ({ strapi 
         // This machine is already registered for THIS license - reactivate it
         keySeat = await strapi.documents('api::key-seat.key-seat').update({
           documentId: existingSeatForThisLicense.documentId,
+          status:'published',
           data: { 
             isActive: true,
             telemetry: {
@@ -304,7 +305,7 @@ export default factories.createCoreController('api::license.license', ({ strapi 
               lastActivated: new Date().toISOString()
             }
           },
-          status: 'published'
+       
         });
 
         // Update license to active

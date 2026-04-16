@@ -1,0 +1,25 @@
+{
+  "kind": "singleType",
+  "collectionName": "mob_latest_apps_releases",
+  "info": {
+    "singularName": "mob-latest-apps-release",
+    "pluralName": "mob-latest-apps-releases",
+    "displayName": "mob-latest-apps-release"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "android": {
+      "type": "component",
+      "component": "apps-releases.release-config",
+      "repeatable": false
+    },
+    "ios": {
+      "type": "component",
+      "component": "apps-releases.release-config",
+      "repeatable": false
+    }
+  }
+}

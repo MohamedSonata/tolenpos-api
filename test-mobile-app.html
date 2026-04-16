@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile App Simulator - Seat Realtime Updates</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #f093fb;
+        }
+        .section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #f093fb;
+        }
+        button {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-right: 10px;
+            margin-top: 10px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(240, 147, 251, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status.disconnected {
+            background: #fee;
+            color: #c33;
+            border: 2px solid #fcc;
+        }
+        .status.connected {
+            background: #efe;
+            color: #3c3;
+            border: 2px solid #cfc;
+        }
+        .status.subscribed {
+            background: #e3f2fd;
+            color: #1976d2;
+            border: 2px solid #bbdefb;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        .status.disconnected .status-indicator {
+            background: #c33;
+        }
+        .status.connected .status-indicator {
+            background: #3c3;
+        }
+        .status.subscribed .status-indicator {
+            background: #1976d2;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        .log-entry.info {
+            color: #4fc3f7;
+        }
+        .log-entry.success {
+            color: #81c784;
+        }
+        .log-entry.error {
+            color: #e57373;
+        }
+        .log-entry.warning {
+            color: #ffb74d;
+        }
+        .log-entry.update {
+            color: #ba68c8;
+            font-weight: bold;
+        }
+        .timestamp {
+            color: #888;
+            margin-right: 10px;
+        }
+        .seats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .seat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+            transition: all 0.3s;
+        }
+        .seat-card.active {
+            border-color: #4caf50;
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+        }
+        .seat-card.inactive {
+            border-color: #f44336;
+            opacity: 0.7;
+        }
+        .seat-card.updated {
+            animation: highlight 1s;
+        }
+        @keyframes highlight {
+            0%, 100% { background: white; }
+            50% { background: #fff9c4; }
+        }
+        .seat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .seat-uuid {
+            font-weight: bold;
+            color: #333;
+            font-size: 14px;
+        }
+        .seat-status {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .seat-status.active {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+        .seat-status.inactive {
+            background: #ffcdd2;
+            color: #c62828;
+        }
+        .seat-info {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .seat-telemetry {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .metric {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 2px solid #e0e0e0;
+            text-align: center;
+        }
+        .metric-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #f093fb;
+        }
+        .clear-log {
+            background: #e57373;
+            margin-top: 10px;
+        }
+        .clear-log:hover {
+            box-shadow: 0 4px 12px rgba(229, 115, 115, 0.4);
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 12px;
+        }
+        .history-table th {
+            background: #f093fb;
+            color: white;
+            padding: 10px;
+            text-align: left;
+        }
+        .history-table td {
+            padding: 10px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .history-table tr:hover {
+            background: #f5f5f5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📱 Mobile App Simulator</h1>
+            <p>Test Socket.IO seat realtime updates from mobile perspective</p>
+        </div>
+
+        <div class="content">
+            <!-- Connection Status -->
+            <div id="connectionStatus" class="status disconnected">
+                <div class="status-indicator"></div>
+                <span>Disconnected</span>
+            </div>
+
+            <!-- Connection Configuration -->
+            <div class="section">
+                <h2>🔌 Connection Configuration</h2>
+                <div class="form-group">
+                    <label for="serverUrl">Server URL</label>
+                    <input type="text" id="serverUrl" value="http://localhost:1334" placeholder="http://localhost:1334">
+                </div>
+                <div class="form-group">
+                    <label for="jwtToken">JWT Token</label>
+                    <input type="text" id="jwtToken" placeholder="Enter your JWT token">
+                </div>
+                <button id="connectBtn" onclick="connect()">Connect to Server</button>
+                <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+            </div>
+
+            <!-- Subscription Controls -->
+            <div class="section">
+                <h2>🔔 Seat Update Subscription</h2>
+                <button id="subscribeBtn" onclick="subscribeToSeats()" disabled>Subscribe to Seat Updates</button>
+                <button id="unsubscribeBtn" onclick="unsubscribeFromSeats()" disabled>Unsubscribe</button>
+            </div>
+
+            <!-- HTTP API Controls -->
+            <div class="section">
+                <h2>🌐 HTTP API Requests</h2>
+                <button onclick="fetchMySeats()">Fetch My Seats (HTTP GET)</button>
+                <button onclick="fetchTelemetryHistory()">Fetch Telemetry History</button>
+                <div class="form-group" style="margin-top: 15px;">
+                    <label for="machineUUIDFilter">Machine UUID (for history filter)</label>
+                    <input type="text" id="machineUUIDFilter" placeholder="Leave empty for all seats">
+                </div>
+                <div class="form-group">
+                    <label for="startDate">Start Date</label>
+                    <input type="datetime-local" id="startDate">
+                </div>
+                <div class="form-group">
+                    <label for="endDate">End Date</label>
+                    <input type="datetime-local" id="endDate">
+                </div>
+            </div>
+
+            <!-- Seats Display -->
+            <div class="section">
+                <h2>💺 My Seats</h2>
+                <div id="seatsContainer" class="seats-grid">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🪑</div>
+                        <p>No seats loaded yet</p>
+                        <p style="font-size: 12px; margin-top: 5px;">Connect and fetch seats to see them here</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metrics Dashboard -->
+            <div class="section">
+                <h2>📈 Metrics</h2>
+                <div class="metrics-grid">
+                    <div class="metric">
+                        <div class="metric-label">Total Seats</div>
+                        <div class="metric-value" id="totalSeats">0</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Active Seats</div>
+                        <div class="metric-value" id="activeSeats">0</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Updates Received</div>
+                        <div class="metric-value" id="updatesReceived">0</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Connection Time</div>
+                        <div class="metric-value" id="connectionTime">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Telemetry History -->
+            <div class="section">
+                <h2>📜 Telemetry History</h2>
+                <div id="historyContainer">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📊</div>
+                        <p>No history loaded yet</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event Log -->
+            <div class="section">
+                <h2>📝 Event Log</h2>
+                <div class="log" id="eventLog"></div>
+                <button class="clear-log" onclick="clearLog()">Clear Log</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+        let connectionStartTime = null;
+        let seats = {};
+        let metrics = {
+            totalSeats: 0,
+            activeSeats: 0,
+            updatesReceived: 0
+        };
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('eventLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `<span class="timestamp">[${timestamp}]</span>${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateMetrics() {
+            document.getElementById('totalSeats').textContent = metrics.totalSeats;
+            document.getElementById('activeSeats').textContent = metrics.activeSeats;
+            document.getElementById('updatesReceived').textContent = metrics.updatesReceived;
+            
+            if (connectionStartTime) {
+                const elapsed = Math.floor((Date.now() - connectionStartTime) / 1000);
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = elapsed % 60;
+                document.getElementById('connectionTime').textContent = `${minutes}m ${seconds}s`;
+            }
+        }
+
+        function updateConnectionStatus(connected, subscribed = false) {
+            const statusDiv = document.getElementById('connectionStatus');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            const subscribeBtn = document.getElementById('subscribeBtn');
+            const unsubscribeBtn = document.getElementById('unsubscribeBtn');
+
+            if (connected) {
+                if (subscribed) {
+                    statusDiv.className = 'status subscribed';
+                    statusDiv.innerHTML = '<div class="status-indicator"></div><span>Connected & Subscribed to Updates</span>';
+                    subscribeBtn.disabled = true;
+                    unsubscribeBtn.disabled = false;
+                } else {
+                    statusDiv.className = 'status connected';
+                    statusDiv.innerHTML = '<div class="status-indicator"></div><span>Connected to Server</span>';
+                    subscribeBtn.disabled = false;
+                    unsubscribeBtn.disabled = true;
+                }
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                connectionStartTime = Date.now();
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.innerHTML = '<div class="status-indicator"></div><span>Disconnected</span>';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                subscribeBtn.disabled = true;
+                unsubscribeBtn.disabled = true;
+                connectionStartTime = null;
+                document.getElementById('connectionTime').textContent = '--';
+            }
+        }
+
+        function connect() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const jwtToken = document.getElementById('jwtToken').value;
+
+            if (!jwtToken) {
+                alert('Please enter JWT token');
+                return;
+            }
+
+            log(`Connecting to ${serverUrl}...`, 'info');
+            log(`JWT Token: ${jwtToken.substring(0, 20)}...`, 'info');
+
+            socket = io(serverUrl, {
+                query: {
+                    token: jwtToken
+                },
+                transports: ['websocket', 'polling']
+            });
+
+            socket.on('connect', () => {
+                log('✅ Connected to server successfully!', 'success');
+                log(`Socket ID: ${socket.id}`, 'info');
+                updateConnectionStatus(true, false);
+            });
+
+            socket.on('disconnect', (reason) => {
+                log(`❌ Disconnected: ${reason}`, 'error');
+                updateConnectionStatus(false);
+            });
+
+            socket.on('connect_error', (error) => {
+                log(`❌ Connection error: ${error.message}`, 'error');
+                updateConnectionStatus(false);
+            });
+
+            // Listen for seat update notifications
+            socket.on('seat:updated', (data) => {
+                log(`🔔 Seat update received!`, 'update');
+                log(`Machine UUID: ${data.machineUUID}`, 'info');
+                log(`Real-time Telemetry: ${JSON.stringify(data.realtimeTelemetry, null, 2)}`, 'info');
+                log(`Is Active: ${data.isActive}`, 'info');
+                log(`Updated At: ${data.updatedAt}`, 'info');
+                
+                // Update seat in local storage
+                if (seats[data.machineUUID]) {
+                    seats[data.machineUUID].realtimeTelemetry = data.realtimeTelemetry;
+                    seats[data.machineUUID].isActive = data.isActive;
+                    seats[data.machineUUID].updatedAt = data.updatedAt;
+                    renderSeats();
+                }
+                
+                metrics.updatesReceived++;
+                updateMetrics();
+            });
+
+            // Listen for subscription responses
+            socket.on('seat:subscribe:success', (data) => {
+                if (data.success) {
+                    log(`✅ Successfully subscribed to seat updates!`, 'success');
+                    updateConnectionStatus(true, true);
+                } else {
+                    log(`❌ Subscription failed: ${data.error}`, 'error');
+                }
+            });
+
+            // Listen for error events
+            socket.on('error:unauthorized', (data) => {
+                log(`🚫 Unauthorized: ${data.error.message}`, 'error');
+            });
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                log('Disconnected from server', 'warning');
+                updateConnectionStatus(false);
+            }
+        }
+
+        function subscribeToSeats() {
+            if (!socket || !socket.connected) {
+                alert('Not connected to server');
+                return;
+            }
+
+            log('📡 Subscribing to seat updates...', 'info');
+            socket.emit('seat:subscribe', {});
+        }
+
+        function unsubscribeFromSeats() {
+            if (!socket || !socket.connected) {
+                alert('Not connected to server');
+                return;
+            }
+
+            log('📡 Unsubscribing from seat updates...', 'info');
+            socket.emit('seat:unsubscribe');
+            updateConnectionStatus(true, false);
+            log('✅ Unsubscribed from seat updates', 'success');
+        }
+
+        async function fetchMySeats() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const jwtToken = document.getElementById('jwtToken').value;
+
+            if (!jwtToken) {
+                alert('Please enter JWT token');
+                return;
+            }
+
+            log('🌐 Fetching seats via HTTP GET /api/key-seats/my-seats...', 'info');
+
+            try {
+                const response = await fetch(`${serverUrl}/api/key-seats/my-seats`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${jwtToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                log(`✅ Fetched ${result.data.length} seats`, 'success');
+                log(`Response: ${JSON.stringify(result, null, 2)}`, 'info');
+
+                // Store seats
+                seats = {};
+                result.data.forEach(seat => {
+                    seats[seat.machineUUID] = seat;
+                });
+
+                // Update metrics
+                metrics.totalSeats = result.data.length;
+                metrics.activeSeats = result.data.filter(s => s.isActive).length;
+                updateMetrics();
+
+                // Render seats
+                renderSeats();
+            } catch (error) {
+                log(`❌ Error fetching seats: ${error.message}`, 'error');
+            }
+        }
+
+        async function fetchTelemetryHistory() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const jwtToken = document.getElementById('jwtToken').value;
+            const machineUUID = document.getElementById('machineUUIDFilter').value;
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            if (!jwtToken) {
+                alert('Please enter JWT token');
+                return;
+            }
+
+            // Build query parameters
+            const params = new URLSearchParams();
+            if (machineUUID) params.append('machineUUID', machineUUID);
+            if (startDate) params.append('startDate', new Date(startDate).toISOString());
+            if (endDate) params.append('endDate', new Date(endDate).toISOString());
+            params.append('page', '1');
+            params.append('pageSize', '50');
+
+            const url = `${serverUrl}/api/seat-telemetry-history/query?${params.toString()}`;
+            log(`🌐 Fetching telemetry history: ${url}`, 'info');
+
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${jwtToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                log(`✅ Fetched ${result.data.length} history records`, 'success');
+                
+                // Render history
+                renderHistory(result.data);
+            } catch (error) {
+                log(`❌ Error fetching history: ${error.message}`, 'error');
+            }
+        }
+
+        function renderSeats() {
+            const container = document.getElementById('seatsContainer');
+            const seatArray = Object.values(seats);
+
+            if (seatArray.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🪑</div>
+                        <p>No seats found</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = seatArray.map(seat => `
+                <div class="seat-card ${seat.isActive ? 'active' : 'inactive'}" id="seat-${seat.machineUUID}">
+                    <div class="seat-header">
+                        <div class="seat-uuid">${seat.machineUUID}</div>
+                        <div class="seat-status ${seat.isActive ? 'active' : 'inactive'}">
+                            ${seat.isActive ? 'ACTIVE' : 'INACTIVE'}
+                        </div>
+                    </div>
+                    <div class="seat-info">
+                        <strong>License:</strong> ${seat.licenseKey || 'N/A'}<br>
+                        <strong>Plan:</strong> ${seat.planSubscriptionType || 'N/A'}<br>
+                        <strong>Updated:</strong> ${seat.updatedAt ? new Date(seat.updatedAt).toLocaleString() : 'Never'}
+                    </div>
+                    <div class="seat-telemetry">
+                        ${seat.realtimeTelemetry ? JSON.stringify(seat.realtimeTelemetry, null, 2) : (seat.telemetry ? JSON.stringify(seat.telemetry, null, 2) : 'No telemetry data')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderHistory(historyData) {
+            const container = document.getElementById('historyContainer');
+
+            if (historyData.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📊</div>
+                        <p>No history records found</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Captured At</th>
+                            <th>Snapshot Type</th>
+                            <th>Machine UUID</th>
+                            <th>Telemetry Data</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${historyData.map(record => `
+                            <tr>
+                                <td>${new Date(record.capturedAt).toLocaleString()}</td>
+                                <td>${record.snapshotType}</td>
+                                <td>${record.keySeat?.machineUUID || 'N/A'}</td>
+                                <td><pre style="margin: 0; font-size: 10px;">${JSON.stringify(record.telemetryData, null, 2)}</pre></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function clearLog() {
+            document.getElementById('eventLog').innerHTML = '';
+            log('Log cleared', 'info');
+        }
+
+        // Update connection time every second
+        setInterval(() => {
+            if (connectionStartTime) {
+                updateMetrics();
+            }
+        }, 1000);
+
+        // Initial log
+        log('Mobile App Simulator initialized', 'info');
+        log('Please configure connection settings and click Connect', 'info');
+    </script>
+</body>
+</html>

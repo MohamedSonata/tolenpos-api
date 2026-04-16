@@ -4,7 +4,8 @@
   "info": {
     "singularName": "key-seat",
     "pluralName": "key-seats",
-    "displayName": "Key-Seat"
+    "displayName": "Key-Seat",
+    "description": "POS seat with activation and real-time telemetry data"
   },
   "options": {
     "draftAndPublish": true
@@ -18,7 +19,12 @@
       "type": "string"
     },
     "telemetry": {
-      "type": "json"
+      "type": "json",
+      "description": "Initial activation telemetry data (preserved from first connection)"
+    },
+    "realtimeTelemetry": {
+      "type": "json",
+      "description": "Real-time telemetry updates including business data (lastOrder, kpiSummary, expenses)"
     },
     "isActive": {
       "type": "boolean",
@@ -29,6 +35,12 @@
       "relation": "manyToOne",
       "target": "api::license.license",
       "inversedBy": "seats"
+    },
+    "telemetryHistory": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::seat-telemetry-history.seat-telemetry-history",
+      "mappedBy": "keySeat"
     }
   }
 }

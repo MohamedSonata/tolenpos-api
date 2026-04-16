@@ -1,0 +1,16 @@
+{
+  "collectionName": "components_user_fcm_tokens",
+  "info": {
+    "displayName": "FCM-Token"
+  },
+  "options": {},
+  "attributes": {
+    "token": {
+      "type": "string"
+    },
+    "lastUpdatedAt": {
+      "type": "datetime"
+    }
+  },
+  "config": {}
+}

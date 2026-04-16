@@ -1,0 +1,33 @@
+{
+  "collectionName": "components_apps_releases_release_configs",
+  "info": {
+    "displayName": "Release-Config"
+  },
+  "options": {},
+  "attributes": {
+    "latestAppVersion": {
+      "type": "string"
+    },
+    "minimumSupportedVersion": {
+      "type": "string"
+    },
+    "storeUrl": {
+      "type": "string"
+    },
+    "customTitle": {
+      "type": "string"
+    },
+    "customMessage": {
+      "type": "string"
+    },
+    "updateType": {
+      "type": "enumeration",
+      "enum": [
+        "mandatory",
+        "optional",
+        "none"
+      ]
+    }
+  },
+  "config": {}
+}

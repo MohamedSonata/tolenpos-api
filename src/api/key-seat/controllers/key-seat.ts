@@ -4,4 +4,262 @@
 
 import { factories } from '@strapi/strapi';
 
-export default factories.createCoreController('api::key-seat.key-seat');
+export default factories.createCoreController('api::key-seat.key-seat', ({ strapi }) => ({
+  /**
+   * GET /api/key-seats/my-seats
+   * Fetches all seats owned by the authenticated user
+   */
+  async mySeats(ctx) {
+    try {
+      // Debug logging
+      strapi.log.info('[KeySeatController] mySeats called');
+      strapi.log.info('[KeySeatController] ctx.state.user:', ctx.state.user);
+      strapi.log.info('[KeySeatController] Authorization header:', ctx.request.headers.authorization);
+
+      // Extract authenticated user from JWT
+      const user = ctx.state.user;
+
+      if (!user) {
+        strapi.log.warn('[KeySeatController] No user in ctx.state.user');
+        return ctx.unauthorized('Authentication required');
+      }
+
+      // Get user's document ID
+      const userDocumentId = user.documentId;
+      strapi.log.info('[KeySeatController] User document ID:', userDocumentId);
+
+      // Fetch seats via service
+      const service = strapi.service('api::key-seat.key-seat');
+      const seats = await service.getUserSeats(userDocumentId);
+
+      strapi.log.info('[KeySeatController] Found seats:', seats.length);
+
+      return ctx.send({
+        data: seats,
+        meta: {
+          total: seats.length
+        }
+      });
+    } catch (error) {
+      strapi.log.error('[KeySeatController] Error fetching user seats:', error);
+      return ctx.internalServerError('Failed to fetch seats');
+    }
+  },
+
+  /**
+   * POST /api/key-seats/:documentId/telemetry/query
+   * Requests real-time telemetry data from POS device via Socket.IO
+   * Falls back to latest snapshot if POS is offline or timeout occurs
+   */
+  async queryTelemetry(ctx) {
+    try {
+      const { documentId } = ctx.params;
+      const { filters = {}, waitForRealtime = true, timeout = 10000 } = ctx.request.body;
+      const user = ctx.state.user;
+
+      if (!user) {
+        return ctx.unauthorized('Authentication required');
+      }
+
+      strapi.log.info('[KeySeatController] Telemetry query requested', {
+        documentId,
+        userDocumentId: user.documentId,
+        filters
+      });
+
+      // Validate ownership
+      const service = strapi.service('api::key-seat.key-seat');
+      const seat = await strapi.documents('api::key-seat.key-seat').findOne({
+        documentId,
+        populate: ['license.user']
+      });
+
+      if (!seat || !seat.license) {
+        return ctx.notFound('Seat not found');
+      }
+
+      const licenseUser = typeof seat.license.user === 'object' 
+        ? seat.license.user.documentId 
+        : seat.license.user;
+
+      if (licenseUser !== user.documentId) {
+        return ctx.forbidden('Access denied: You do not own this seat');
+      }
+
+      // If not waiting for realtime, return latest snapshot immediately
+      if (!waitForRealtime) {
+        const snapshot = await service.getLatestSnapshot(documentId);
+        
+        if (!snapshot) {
+          return ctx.notFound('No telemetry data available');
+        }
+
+        const snapshotDate = new Date(snapshot.capturedAt);
+        const ageHours = Math.floor((Date.now() - snapshotDate.getTime()) / (1000 * 60 * 60));
+
+        return ctx.send({
+          success: true,
+          source: 'snapshot',
+          data: snapshot.telemetryData,
+          timestamp: snapshot.capturedAt,
+          snapshotAge: ageHours
+        });
+      }
+
+      // Check if POS is online
+      if (!seat.userSocketId) {
+        strapi.log.info('[KeySeatController] POS offline, returning snapshot');
+        const snapshot = await service.getLatestSnapshot(documentId);
+        
+        if (!snapshot) {
+          return ctx.notFound('POS device offline and no snapshot available');
+        }
+
+        const snapshotDate = new Date(snapshot.capturedAt);
+        const ageHours = Math.floor((Date.now() - snapshotDate.getTime()) / (1000 * 60 * 60));
+
+        return ctx.send({
+          success: true,
+          source: 'snapshot',
+          data: snapshot.telemetryData,
+          timestamp: snapshot.capturedAt,
+          warning: `POS device offline - showing snapshot from ${ageHours} hours ago`,
+          snapshotAge: ageHours
+        });
+      }
+
+      // POS is online - trigger Socket.IO query
+      // Note: This is a REST endpoint, so we can't wait for Socket.IO response
+      // The mobile app should use Socket.IO directly for real-time queries
+      // This endpoint is mainly for checking availability and getting snapshots
+
+      return ctx.send({
+        success: true,
+        message: 'POS device is online. Use Socket.IO event "seat:telemetry:query" for real-time data.',
+        posOnline: true,
+        socketId: seat.userSocketId
+      });
+
+    } catch (error) {
+      strapi.log.error('[KeySeatController] Error querying telemetry:', error);
+      return ctx.internalServerError('Failed to query telemetry data');
+    }
+  },
+
+  /**
+   * GET /api/key-seats/:documentId/telemetry/latest
+   * Gets the latest telemetry snapshot (no Socket.IO, snapshot only)
+   */
+  async getLatestTelemetry(ctx) {
+    try {
+      const { documentId } = ctx.params;
+      const user = ctx.state.user;
+
+      if (!user) {
+        return ctx.unauthorized('Authentication required');
+      }
+
+      // Validate ownership
+      const seat = await strapi.documents('api::key-seat.key-seat').findOne({
+        documentId,
+        populate: ['license.user']
+      });
+
+      if (!seat || !seat.license) {
+        return ctx.notFound('Seat not found');
+      }
+
+      const licenseUser = typeof seat.license.user === 'object' 
+        ? seat.license.user.documentId 
+        : seat.license.user;
+
+      if (licenseUser !== user.documentId) {
+        return ctx.forbidden('Access denied: You do not own this seat');
+      }
+
+      // Get latest snapshot
+      const service = strapi.service('api::key-seat.key-seat');
+      const snapshot = await service.getLatestSnapshot(documentId);
+
+      if (!snapshot) {
+        return ctx.notFound('No telemetry snapshot available');
+      }
+
+      const snapshotDate = new Date(snapshot.capturedAt);
+      const ageHours = Math.floor((Date.now() - snapshotDate.getTime()) / (1000 * 60 * 60));
+
+      return ctx.send({
+        success: true,
+        source: 'snapshot',
+        data: snapshot.telemetryData,
+        timestamp: snapshot.capturedAt,
+        snapshotAge: ageHours,
+        snapshotType: snapshot.snapshotType
+      });
+
+    } catch (error) {
+      strapi.log.error('[KeySeatController] Error getting latest telemetry:', error);
+      return ctx.internalServerError('Failed to get telemetry data');
+    }
+  },
+
+  /**
+   * POST /api/key-seats/:documentId/telemetry/snapshot
+   * Manually triggers a telemetry snapshot (admin/user triggered)
+   */
+  async createSnapshot(ctx) {
+    try {
+      const { documentId } = ctx.params;
+      const user = ctx.state.user;
+
+      if (!user) {
+        return ctx.unauthorized('Authentication required');
+      }
+
+      // Validate ownership
+      const seat = await strapi.documents('api::key-seat.key-seat').findOne({
+        documentId,
+        populate: ['license.user']
+      });
+
+      if (!seat || !seat.license) {
+        return ctx.notFound('Seat not found');
+      }
+
+      const licenseUser = typeof seat.license.user === 'object' 
+        ? seat.license.user.documentId 
+        : seat.license.user;
+
+      if (licenseUser !== user.documentId) {
+        return ctx.forbidden('Access denied: You do not own this seat');
+      }
+
+      // Check if seat has telemetry data
+      if (!seat.realtimeTelemetry || Object.keys(seat.realtimeTelemetry).length === 0) {
+        return ctx.badRequest('No telemetry data available to snapshot');
+      }
+
+      // Create snapshot
+      const service = strapi.service('api::key-seat.key-seat');
+      const snapshot = await service.createTelemetrySnapshot(
+        documentId,
+        seat.realtimeTelemetry,
+        'realtime' // User-triggered snapshots are marked as 'realtime'
+      );
+
+      return ctx.send({
+        success: true,
+        message: 'Snapshot created successfully',
+        snapshot: {
+          documentId: snapshot.documentId,
+          capturedAt: snapshot.capturedAt,
+          snapshotType: snapshot.snapshotType
+        }
+      });
+
+    } catch (error) {
+      strapi.log.error('[KeySeatController] Error creating snapshot:', error);
+      return ctx.internalServerError('Failed to create snapshot');
+    }
+  }
+}));

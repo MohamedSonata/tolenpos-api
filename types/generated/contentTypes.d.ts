@@ -545,6 +545,7 @@ export interface ApiAppReleaseAppRelease extends Struct.SingleTypeSchema {
 export interface ApiKeySeatKeySeat extends Struct.CollectionTypeSchema {
   collectionName: 'key_seats';
   info: {
+    description: 'POS seat with activation and real-time telemetry data';
     displayName: 'Key-Seat';
     pluralName: 'key-seats';
     singularName: 'key-seat';
@@ -566,7 +567,12 @@ export interface ApiKeySeatKeySeat extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     machineUUID: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
+    realtimeTelemetry: Schema.Attribute.JSON;
     telemetry: Schema.Attribute.JSON;
+    telemetryHistory: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::seat-telemetry-history.seat-telemetry-history'
+    >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -611,6 +617,73 @@ export interface ApiLicenseLicense extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+  };
+}
+
+export interface ApiMobLatestAppsReleaseMobLatestAppsRelease
+  extends Struct.SingleTypeSchema {
+  collectionName: 'mob_latest_apps_releases';
+  info: {
+    displayName: 'mob-latest-apps-release';
+    pluralName: 'mob-latest-apps-releases';
+    singularName: 'mob-latest-apps-release';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    android: Schema.Attribute.Component<'apps-releases.release-config', false>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    ios: Schema.Attribute.Component<'apps-releases.release-config', false>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::mob-latest-apps-release.mob-latest-apps-release'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiSeatTelemetryHistorySeatTelemetryHistory
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'seat_telemetry_histories';
+  info: {
+    description: 'Historical snapshots of POS seat telemetry data';
+    displayName: 'Seat Telemetry History';
+    pluralName: 'seat-telemetry-histories';
+    singularName: 'seat-telemetry-history';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    capturedAt: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    keySeat: Schema.Attribute.Relation<'manyToOne', 'api::key-seat.key-seat'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::seat-telemetry-history.seat-telemetry-history'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    snapshotType: Schema.Attribute.Enumeration<
+      ['realtime', 'hourly', 'daily']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'realtime'>;
+    telemetryData: Schema.Attribute.JSON & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
   };
 }
 
@@ -1152,6 +1225,7 @@ export interface PluginUsersPermissionsUser
       Schema.Attribute.SetMinMaxLength<{
         minLength: 6;
       }>;
+    fcmToken: Schema.Attribute.Component<'user.fcm-token', false>;
     licenses: Schema.Attribute.Relation<'oneToMany', 'api::license.license'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -1205,6 +1279,8 @@ declare module '@strapi/strapi' {
       'api::app-release.app-release': ApiAppReleaseAppRelease;
       'api::key-seat.key-seat': ApiKeySeatKeySeat;
       'api::license.license': ApiLicenseLicense;
+      'api::mob-latest-apps-release.mob-latest-apps-release': ApiMobLatestAppsReleaseMobLatestAppsRelease;
+      'api::seat-telemetry-history.seat-telemetry-history': ApiSeatTelemetryHistorySeatTelemetryHistory;
       'api::subscription-plan.subscription-plan': ApiSubscriptionPlanSubscriptionPlan;
       'plugin::content-releases.release': PluginContentReleasesRelease;
       'plugin::content-releases.release-action': PluginContentReleasesReleaseAction;

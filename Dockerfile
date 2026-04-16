@@ -7,7 +7,8 @@ ENV NODE_ENV=${NODE_ENV}
 WORKDIR /opt/
 COPY package.json yarn.lock* package-lock.json* ./
 RUN yarn config set network-timeout 600000 -g
-RUN yarn install --frozen-lockfile --production
+RUN yarn cache clean
+RUN yarn install --frozen-lockfile --production --no-cache
 
 ENV PATH=/opt/node_modules/.bin:$PATH
 WORKDIR /opt/app

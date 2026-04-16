@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS App Simulator - Seat Realtime Updates</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        textarea {
+            min-height: 100px;
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-right: 10px;
+            margin-top: 10px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status.disconnected {
+            background: #fee;
+            color: #c33;
+            border: 2px solid #fcc;
+        }
+        .status.connected {
+            background: #efe;
+            color: #3c3;
+            border: 2px solid #cfc;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        .status.disconnected .status-indicator {
+            background: #c33;
+        }
+        .status.connected .status-indicator {
+            background: #3c3;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        .log-entry.info {
+            color: #4fc3f7;
+        }
+        .log-entry.success {
+            color: #81c784;
+        }
+        .log-entry.error {
+            color: #e57373;
+        }
+        .log-entry.warning {
+            color: #ffb74d;
+        }
+        .timestamp {
+            color: #888;
+            margin-right: 10px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .metric {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 2px solid #e0e0e0;
+        }
+        .metric-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .clear-log {
+            background: #e57373;
+            margin-top: 10px;
+        }
+        .clear-log:hover {
+            box-shadow: 0 4px 12px rgba(229, 115, 115, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🖥️ POS App Simulator</h1>
+            <p>Test Socket.IO seat realtime updates from POS perspective</p>
+        </div>
+
+        <div class="content">
+            <!-- Connection Status -->
+            <div id="connectionStatus" class="status disconnected">
+                <div class="status-indicator"></div>
+                <span>Disconnected</span>
+            </div>
+
+            <!-- Connection Configuration -->
+            <div class="section">
+                <h2>🔌 Connection Configuration</h2>
+                <div class="form-group">
+                    <label for="serverUrl">Server URL</label>
+                    <input type="text" id="serverUrl" value="http://localhost:1334" placeholder="http://localhost:1334">
+                </div>
+                <div class="form-group">
+                    <label for="licenseKey">License Key (API Token)</label>
+                    <input type="text" id="licenseKey" placeholder="Enter your license key">
+                </div>
+                <div class="form-group">
+                    <label for="userDocumentId">User Document ID</label>
+                    <input type="text" id="userDocumentId" placeholder="Enter user document ID">
+                </div>
+                <div class="form-group">
+                    <label for="machineUUID">Machine UUID</label>
+                    <input type="text" id="machineUUID" placeholder="Enter machine UUID (e.g., POS-001)">
+                </div>
+                <button id="connectBtn" onclick="connect()">Connect to Server</button>
+                <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+            </div>
+
+            <!-- Telemetry Data -->
+            <div class="section">
+                <h2>📊 Send Real-time Telemetry Update</h2>
+                <p style="color: #666; font-size: 13px; margin-bottom: 15px;">
+                    ℹ️ Note: Real-time telemetry is stored in <code>realtimeTelemetry</code> field. 
+                    Initial activation data in <code>telemetry</code> field is preserved.
+                </p>
+                <div class="form-group">
+                    <label for="telemetryData">Real-time Telemetry Data (JSON) - Includes Business Data</label>
+                    <textarea id="telemetryData" placeholder='{"cpuUsage": 45, "memoryUsage": 60, "transactionsToday": 150}'>{
+  "networkStatus": "online",
+  "lastSyncTime": "2024-01-15T10:30:45.123Z",
+  "lastOrder": {
+    "receiptNumber": "RCP-2024-001234",
+    "total": 125.50,
+    "itemCount": 3,
+    "paymentMethod": "card",
+    "status": "completed",
+    "createdAt": "2024-01-15T10:25:30.000Z",
+    "items": [
+      {"name": "Coffee", "quantity": 2, "price": 5.00},
+      {"name": "Sandwich", "quantity": 1, "price": 115.50}
+    ],
+    "customer": {"name": "John Doe", "phone": "+1234567890"}
+  },
+  "kpiSummary": {
+    "totalSales": 3450.75,
+    "transactionCount": 42,
+    "averageTransactionValue": 82.16,
+    "period": "today",
+    "lastUpdated": "2024-01-15T10:30:45.123Z"
+  },
+  "expenses": [
+    {
+      "id": "exp-001",
+      "title": "Office Supplies",
+      "amount": 125.00,
+      "category": "Supplies",
+      "paymentMethod": "card",
+      "expenseDate": "2024-01-15T09:00:00.000Z",
+      "isUrgent": false
+    },
+    {
+      "id": "exp-002",
+      "title": "Cleaning Services",
+      "amount": 75.00,
+      "category": "Services",
+      "paymentMethod": "cash",
+      "expenseDate": "2024-01-15T08:30:00.000Z",
+      "isUrgent": false
+    }
+  ],
+  "osVersion": "Windows 10",
+  "appVersion": "2.1.0",
+  "cpuUsage": 45,
+  "memoryUsage": 60,
+  "diskSpace": 250,
+  "cashDrawerStatus": "closed",
+  "printerStatus": "online"
+}</textarea>
+                </div>
+                <button onclick="sendTelemetryUpdate()" id="sendTelemetryBtn" disabled>Send Telemetry Update</button>
+                <button onclick="sendRandomTelemetry()">Send Random Telemetry</button>
+                <button onclick="startAutoUpdate()">Start Auto-Update (5s)</button>
+                <button onclick="stopAutoUpdate()">Stop Auto-Update</button>
+            </div>
+
+            <!-- Metrics Dashboard -->
+            <div class="section">
+                <h2>📈 Metrics</h2>
+                <div class="grid">
+                    <div class="metric">
+                        <div class="metric-label">Updates Sent</div>
+                        <div class="metric-value" id="updatesSent">0</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Success Responses</div>
+                        <div class="metric-value" id="successResponses">0</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Failed Updates</div>
+                        <div class="metric-value" id="failedUpdates">0</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Connection Time</div>
+                        <div class="metric-value" id="connectionTime">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event Log -->
+            <div class="section">
+                <h2>📝 Event Log</h2>
+                <div class="log" id="eventLog"></div>
+                <button class="clear-log" onclick="clearLog()">Clear Log</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+        let autoUpdateInterval = null;
+        let connectionStartTime = null;
+        let metrics = {
+            updatesSent: 0,
+            successResponses: 0,
+            failedUpdates: 0
+        };
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('eventLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `<span class="timestamp">[${timestamp}]</span>${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateMetrics() {
+            document.getElementById('updatesSent').textContent = metrics.updatesSent;
+            document.getElementById('successResponses').textContent = metrics.successResponses;
+            document.getElementById('failedUpdates').textContent = metrics.failedUpdates;
+            
+            if (connectionStartTime) {
+                const elapsed = Math.floor((Date.now() - connectionStartTime) / 1000);
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = elapsed % 60;
+                document.getElementById('connectionTime').textContent = `${minutes}m ${seconds}s`;
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusDiv = document.getElementById('connectionStatus');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            const sendBtn = document.getElementById('sendTelemetryBtn');
+
+            if (connected) {
+                statusDiv.className = 'status connected';
+                statusDiv.innerHTML = '<div class="status-indicator"></div><span>Connected to Server</span>';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                sendBtn.disabled = false;
+                connectionStartTime = Date.now();
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.innerHTML = '<div class="status-indicator"></div><span>Disconnected</span>';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                sendBtn.disabled = true;
+                connectionStartTime = null;
+                document.getElementById('connectionTime').textContent = '--';
+            }
+        }
+
+        function connect() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const licenseKey = document.getElementById('licenseKey').value;
+            const userDocumentId = document.getElementById('userDocumentId').value;
+            const machineUUID = document.getElementById('machineUUID').value;
+
+            if (!licenseKey || !userDocumentId || !machineUUID) {
+                alert('Please fill in all connection fields');
+                return;
+            }
+
+            log(`Connecting to ${serverUrl}...`, 'info');
+            log(`License Key: ${licenseKey}`, 'info');
+            log(`User ID: ${userDocumentId}`, 'info');
+            log(`Machine UUID: ${machineUUID}`, 'info');
+
+            socket = io(serverUrl, {
+                query: {
+                    token: licenseKey,
+                    userDocumentId: userDocumentId,
+                    machineUUID: machineUUID
+                },
+                transports: ['websocket', 'polling']
+            });
+
+            socket.on('connect', () => {
+                log('✅ Connected to server successfully!', 'success');
+                log(`Socket ID: ${socket.id}`, 'info');
+                updateConnectionStatus(true);
+            });
+
+            socket.on('disconnect', (reason) => {
+                log(`❌ Disconnected: ${reason}`, 'error');
+                updateConnectionStatus(false);
+                stopAutoUpdate();
+            });
+
+            socket.on('connect_error', (error) => {
+                log(`❌ Connection error: ${error.message}`, 'error');
+                updateConnectionStatus(false);
+            });
+
+            // Listen for seat update success response
+            socket.on('seat:update:success', (data) => {
+                if (data.success) {
+                    log(`✅ Seat update successful! Updated at: ${data.updatedAt}`, 'success');
+                    metrics.successResponses++;
+                } else {
+                    log(`❌ Seat update failed: ${data.error}`, 'error');
+                    metrics.failedUpdates++;
+                }
+                updateMetrics();
+            });
+
+            // Listen for plan updates
+            socket.on('plan:current', (data) => {
+                log(`📋 Current plan received: ${data.planType}`, 'info');
+                log(`Plan features: ${JSON.stringify(data.features, null, 2)}`, 'info');
+            });
+
+            socket.on('plan:updated', (data) => {
+                log(`🔄 Plan updated to: ${data.planType}`, 'warning');
+                log(`Effective date: ${data.effectiveDate}`, 'info');
+            });
+
+            // Listen for error events
+            socket.on('error:unauthorized', (data) => {
+                log(`🚫 Unauthorized: ${data.error.message}`, 'error');
+            });
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                log('Disconnected from server', 'warning');
+                updateConnectionStatus(false);
+                stopAutoUpdate();
+            }
+        }
+
+        function sendTelemetryUpdate() {
+            if (!socket || !socket.connected) {
+                alert('Not connected to server');
+                return;
+            }
+
+            try {
+                const telemetryData = JSON.parse(document.getElementById('telemetryData').value);
+                
+                log('📤 Sending real-time telemetry update...', 'info');
+                log(`Data: ${JSON.stringify(telemetryData, null, 2)}`, 'info');
+                
+                socket.emit('seat:update', {
+                    realtimeTelemetry: telemetryData
+                });
+                
+                metrics.updatesSent++;
+                updateMetrics();
+            } catch (error) {
+                log(`❌ Invalid JSON: ${error.message}`, 'error');
+                alert('Invalid JSON format in telemetry data');
+            }
+        }
+
+        function sendRandomTelemetry() {
+            const now = new Date().toISOString();
+            const randomData = {
+                networkStatus: Math.random() > 0.95 ? "offline" : "online",
+                lastSyncTime: now,
+                lastOrder: {
+                    receiptNumber: `RCP-${Date.now()}`,
+                    total: (Math.random() * 200 + 10).toFixed(2),
+                    itemCount: Math.floor(Math.random() * 10) + 1,
+                    paymentMethod: ["card", "cash", "mobile"][Math.floor(Math.random() * 3)],
+                    status: "completed",
+                    createdAt: now,
+                    items: [
+                        {
+                            name: ["Coffee", "Sandwich", "Salad", "Pizza"][Math.floor(Math.random() * 4)],
+                            quantity: Math.floor(Math.random() * 3) + 1,
+                            price: (Math.random() * 50 + 5).toFixed(2)
+                        }
+                    ]
+                },
+                kpiSummary: {
+                    totalSales: (Math.random() * 5000 + 1000).toFixed(2),
+                    transactionCount: Math.floor(Math.random() * 100) + 10,
+                    averageTransactionValue: (Math.random() * 100 + 20).toFixed(2),
+                    period: "today",
+                    lastUpdated: now
+                },
+                expenses: [
+                    {
+                        id: `exp-${Date.now()}`,
+                        title: ["Office Supplies", "Cleaning", "Utilities", "Maintenance"][Math.floor(Math.random() * 4)],
+                        amount: (Math.random() * 200 + 20).toFixed(2),
+                        category: ["Supplies", "Services", "Utilities"][Math.floor(Math.random() * 3)],
+                        paymentMethod: Math.random() > 0.5 ? "card" : "cash",
+                        expenseDate: now,
+                        isUrgent: Math.random() > 0.8
+                    }
+                ],
+                osVersion: "Windows 10",
+                appVersion: "2.1.0",
+                cpuUsage: Math.floor(Math.random() * 100),
+                memoryUsage: Math.floor(Math.random() * 100),
+                diskSpace: Math.floor(Math.random() * 500),
+                cashDrawerStatus: Math.random() > 0.5 ? "closed" : "open",
+                printerStatus: Math.random() > 0.9 ? "offline" : "online"
+            };
+
+            document.getElementById('telemetryData').value = JSON.stringify(randomData, null, 2);
+            sendTelemetryUpdate();
+        }
+
+        function startAutoUpdate() {
+            if (autoUpdateInterval) {
+                log('⚠️ Auto-update already running', 'warning');
+                return;
+            }
+
+            log('🔄 Starting auto-update (every 5 seconds)...', 'info');
+            autoUpdateInterval = setInterval(() => {
+                sendRandomTelemetry();
+            }, 5000);
+        }
+
+        function stopAutoUpdate() {
+            if (autoUpdateInterval) {
+                clearInterval(autoUpdateInterval);
+                autoUpdateInterval = null;
+                log('⏹️ Auto-update stopped', 'warning');
+            }
+        }
+
+        function clearLog() {
+            document.getElementById('eventLog').innerHTML = '';
+            log('Log cleared', 'info');
+        }
+
+        // Update connection time every second
+        setInterval(() => {
+            if (connectionStartTime) {
+                updateMetrics();
+            }
+        }, 1000);
+
+        // Initial log
+        log('POS App Simulator initialized', 'info');
+        log('Please configure connection settings and click Connect', 'info');
+    </script>
+</body>
+</html>
