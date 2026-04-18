@@ -136,4 +136,8 @@ build
 # Firebase service account keys
 *firebase-adminsdk*.json
 tolen-pos-2026-firebase-adminsdk-fbsvc-5c14f37599.json
+
+# Docker Compose files (contain production secrets)
 docker-compose.swarm.yml
+docker-compose.swarm.simple.yml
+docker-compose*.yml

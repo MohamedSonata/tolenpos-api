@@ -1228,7 +1228,6 @@ export interface PluginUsersPermissionsUser
         minLength: 6;
       }>;
     fcmToken: Schema.Attribute.Component<'user.fcm-token', false>;
-    isConnected: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     licenses: Schema.Attribute.Relation<'oneToMany', 'api::license.license'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -1250,6 +1249,8 @@ export interface PluginUsersPermissionsUser
       'manyToOne',
       'plugin::users-permissions.role'
     >;
+    socketConnectionStatus: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
     socketId: Schema.Attribute.String;
     subscriptionPlan: Schema.Attribute.Relation<
       'oneToOne',

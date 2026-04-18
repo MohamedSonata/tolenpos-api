@@ -155,7 +155,7 @@ async function updateKeySeatSocketId(
       status: 'published',
       data: {
         userSocketId: socket.id, // For monitoring only
-        isConnected: true, // Mark as connected
+        socketConnectionStatus: true, // Mark as connected
         lastConnectedAt: new Date().toISOString(), // Track connection time
       },
     });
@@ -193,7 +193,7 @@ async function updateUserSocketId(
       documentId: userDocumentId,
       data: {
         socketId: socket.id, // For monitoring only
-        isConnected: true, // Mark as connected
+        socketConnectionStatus: true, // Mark as connected
         lastConnectedAt: new Date().toISOString(),
       },
       status: 'published',
@@ -278,7 +278,7 @@ async function clearUserSocketId(
       documentId: userDocumentId,
       data: {
         socketId: null,
-        isConnected: false, // Mark as disconnected
+        socketConnectionStatus: false, // Mark as disconnected
       },
       status: 'published',
     });

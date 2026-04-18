@@ -89,14 +89,14 @@
     "socketId": {
       "type": "string"
     },
+    "socketConnectionStatus": {
+      "type": "boolean",
+      "default": false
+    },
     "fcmToken": {
       "type": "component",
       "component": "user.fcm-token",
       "repeatable": false
-    },
-    "isConnected": {
-      "type": "boolean",
-      "default": false
     }
   }
 }
