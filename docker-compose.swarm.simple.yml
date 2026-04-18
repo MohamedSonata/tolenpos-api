@@ -4,8 +4,23 @@ services:
     image: mosonata/tolen-pos-api
     restart: unless-stopped
     env_file: ./.env.production
+   # We comment this line because we passing the env from envFile paramter
+    # environment:
+    #   DATABASE_CLIENT: ${DATABASE_CLIENT}
+    #   DATABASE_HOST: strapiDB
+    #   DATABASE_PORT: ${DATABASE_PORT}
+    #   DATABASE_NAME: ${DATABASE_NAME}
+    #   DATABASE_USERNAME: ${DATABASE_USERNAME}
+    #   DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+    #   JWT_SECRET: ${JWT_SECRET}
+    #   ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET}
+    #   APP_KEYS: ${APP_KEYS}
+    #   NODE_ENV: ${NODE_ENV}
+    #   DOWNLOAD_METRICS_PATH: /app/data/metrics
     deploy:
       replicas: 3
+      # placement:
+      #   max_replicas_per_node: 1
       update_config:
         parallelism: 3
         delay: 50s
@@ -17,8 +32,12 @@ services:
       - ./package.json:/opt/package.json
       - ./yarn.lock:/opt/yarn.lock
       - ./public/uploads:/opt/app/public/uploads
+      # this is the path of the data on the gdrive
     ports:
       - "1334:1334"
+   # also we comment this because we using docker Swarm
+    # networks:
+    #   - strapi
     depends_on:
       - tolenPosDb
       - tolenPosRedis
@@ -29,22 +48,26 @@ services:
     image: postgres:latest
     environment:
       POSTGRES_USER: tolenpos
-      POSTGRES_PASSWORD: AddingIt
+      POSTGRES_PASSWORD: AddingIT
       POSTGRES_DB: tolen_pos_db
     volumes:
       - strapi-tolen-data:/var/lib/postgresql
     ports:
-      - "5439:5432"
+      - "5434:5432"
+    # also we comment this because we using docker Swarm
+    # networks:
+    #   - strapi
+
 
   tolenPosRedis:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "6380:6379"
+      - "6380:6379"  # External port 6380 to avoid conflict with existing Redis on 6379
     volumes:
       - tolen-pos-redis-data:/data
-    # Simple command without config file
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
     deploy:
       replicas: 1
       placement:
@@ -59,3 +82,4 @@ services:
 volumes:
   strapi-tolen-data:
   tolen-pos-redis-data:
+

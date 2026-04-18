@@ -141,3 +141,4 @@ tolen-pos-2026-firebase-adminsdk-fbsvc-5c14f37599.json
 docker-compose.swarm.yml
 docker-compose.swarm.simple.yml
 docker-compose*.yml
+.en.production.server
