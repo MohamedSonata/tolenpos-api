@@ -2,12 +2,18 @@
  * Seat Update Socket Handler
  * Handles POS seat update events and mobile app subscription to seat updates
  * Requirements: 7.1, 7.2, 8.1
+ * 
+ * MULTI-REPLICA COMPATIBLE:
+ * - Uses room-based communication exclusively
+ * - No socket ID storage in database
+ * - Works across all replicas seamlessly
  */
 
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import type { Core } from '@strapi/strapi';
 import { SocketIOEvents } from '../events_constants';
 import { SeatUpdatePayload, SeatSubscribePayload } from '../interfaces';
+import { multiReplicaSocketManager } from '../socket-manager';
 
 /**
  * Sets up seat update event handlers for Socket.IO connections
@@ -188,7 +194,7 @@ function handleMobileSeatSubscription(
 
 /**
  * Notifies all subscribed mobile apps of a seat update
- * Uses both Socket.IO rooms (for subscribed clients) and direct socket IDs (for all connected mobile apps)
+ * Uses room-based communication for multi-replica compatibility
  * Requirements: 4.4, 4.5, 5.5, 10.1, 10.2, 10.3, 10.4, 10.5, 11.1, 11.3, 11.4, 11.5
  * @param io - Socket.IO server instance
  * @param strapi - Strapi instance
@@ -230,13 +236,13 @@ async function notifyMobileAppsOfSeatUpdate(
     // Prepare notification payload with real-time telemetry
     const notificationPayload = {
       machineUUID: updatedSeat.machineUUID,
-      realtimeTelemetry: updatedSeat.realtimeTelemetry || updatedSeat.telemetry, // Fallback to telemetry if realtimeTelemetry not set
+      realtimeTelemetry: updatedSeat.realtimeTelemetry || updatedSeat.telemetry,
       isActive: updatedSeat.isActive,
       updatedAt: updatedSeat.updatedAt,
       licenseDocumentId: licenseDocumentId
     };
 
-    // Method 1: Emit to user-specific room (for subscribed mobile apps)
+    // Emit to user-specific room (works across all replicas)
     const roomName = `user:${ownerDocumentId}:seats`;
     io.to(roomName).emit(SocketIOEvents.EmitSeatUpdated, notificationPayload);
 
@@ -247,18 +253,6 @@ async function notifyMobileAppsOfSeatUpdate(
       hasKpiSummary: !!updatedSeat.realtimeTelemetry?.kpiSummary,
       expensesCount: updatedSeat.realtimeTelemetry?.expenses?.length || 0
     });
-
-    // Method 2: Also emit directly to user's socket ID if they're connected (fallback/redundancy)
-    // This ensures delivery even if the mobile app hasn't explicitly subscribed to the room
-    const user = await strapi.documents('plugin::users-permissions.user').findOne({
-      documentId: ownerDocumentId,
-      fields: ['socketId']
-    });
-
-    if (user && user.socketId) {
-      io.to(user.socketId).emit(SocketIOEvents.EmitSeatUpdated, notificationPayload);
-      strapi.log.info(`[SeatUpdateHandler] Also sent direct notification to user socket ${user.socketId}`);
-    }
 
   } catch (error) {
     strapi.log.error(`[SeatUpdateHandler] Error notifying mobile apps: ${error.message}`, {

@@ -2,6 +2,11 @@
  * Telemetry Query Socket Handler
  * Handles real-time telemetry queries from mobile apps to POS devices
  * Implements request-response pattern with timeout and fallback to snapshots
+ * 
+ * MULTI-REPLICA COMPATIBLE:
+ * - Uses room-based communication instead of socket IDs
+ * - Stores pending requests in Redis for cross-replica access
+ * - Works regardless of which replica handles the request/response
  */
 
 import { Server as SocketIOServer, Socket } from 'socket.io';
@@ -12,12 +17,11 @@ import {
   TelemetryQueryResponse,
   TelemetryQueryError
 } from '../interfaces';
+import { multiReplicaSocketManager } from '../socket-manager';
+import { redisStateManager, PendingRequest } from '../redis-state-manager';
 
 // Timeout for waiting for POS response (10 seconds)
-const QUERY_TIMEOUT_MS = 10000;
-
-// Store pending requests for timeout handling
-const pendingRequests = new Map<string, NodeJS.Timeout>();
+const QUERY_TIMEOUT_MS = parseInt(process.env.TELEMETRY_QUERY_TIMEOUT || '10000', 10);
 
 /**
  * Sets up telemetry query event handlers for Socket.IO connections
@@ -48,7 +52,7 @@ export function setupTelemetryQueryHandlers(
 
   // Clean up pending requests on disconnect to prevent memory leaks
   socket.on('disconnect', () => {
-    cleanupPendingRequests(socket.id, strapi);
+    cleanupPendingRequests(socket, strapi);
   });
 }
 
@@ -114,32 +118,47 @@ function handleMobileTelemetryQuery(
         return;
       }
 
-      // Forward request to POS device
-      io.to(seat.userSocketId).emit(SocketIOEvents.EmitTelemetryQueryRequest, {
+      // Store pending request in Redis (works across replicas)
+      const pendingRequest: PendingRequest = {
+        requestId,
+        mobileSocketId: socket.id,
+        keySeatDocumentId,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + QUERY_TIMEOUT_MS
+      };
+      
+      await redisStateManager.storePendingRequest(pendingRequest);
+
+      // Forward request to POS device using room-based communication
+      const posRoom = `pos:${keySeatDocumentId}`;
+      io.to(posRoom).emit(SocketIOEvents.EmitTelemetryQueryRequest, {
         requestId,
         keySeatDocumentId,
         filters,
-        mobileSocketId: socket.id // So POS knows where to send response
+        mobileSocketId: socket.id // For logging/debugging only
       });
 
-      strapi.log.info(`[TelemetryQueryHandler] Forwarded query to POS`, {
+      strapi.log.info(`[TelemetryQueryHandler] Forwarded query to POS room`, {
         requestId,
-        posSocketId: seat.userSocketId
+        posRoom
       });
 
       // Set timeout for POS response
-      const timeoutId = setTimeout(async () => {
-        pendingRequests.delete(requestId);
+      setTimeout(async () => {
+        // Check if request still exists (not already responded)
+        const stillPending = await redisStateManager.getPendingRequest(requestId);
         
-        strapi.log.warn(`[TelemetryQueryHandler] Query timeout, using fallback`, {
-          requestId,
-          keySeatDocumentId
-        });
+        if (stillPending) {
+          await redisStateManager.deletePendingRequest(requestId);
+          
+          strapi.log.warn(`[TelemetryQueryHandler] Query timeout, using fallback`, {
+            requestId,
+            keySeatDocumentId
+          });
 
-        await sendFallbackSnapshot(socket, strapi, requestId, keySeatDocumentId);
+          await sendFallbackSnapshot(socket, strapi, requestId, keySeatDocumentId);
+        }
       }, QUERY_TIMEOUT_MS);
-
-      pendingRequests.set(requestId, timeoutId);
 
     } catch (error) {
       strapi.log.error(`[TelemetryQueryHandler] Error handling query request`, {
@@ -179,15 +198,23 @@ function handlePOSTelemetryResponse(
         dataSize: JSON.stringify(telemetryData).length
       });
 
-      // Clear timeout
-      const timeoutId = pendingRequests.get(requestId);
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        pendingRequests.delete(requestId);
+      // Get pending request from Redis
+      const pendingRequest = await redisStateManager.getPendingRequest(requestId);
+      
+      if (!pendingRequest) {
+        strapi.log.warn(`[TelemetryQueryHandler] No pending request found (may have timed out)`, {
+          requestId
+        });
+        return;
       }
 
-      // Forward response to mobile app
-      io.to(mobileSocketId).emit(SocketIOEvents.EmitTelemetryQueryResponse, {
+      // Delete pending request
+      await redisStateManager.deletePendingRequest(requestId);
+
+      // Forward response to mobile app using room-based communication
+      // Use the mobile socket ID from the pending request (more reliable than response)
+      const mobileRoom = `mobile:${pendingRequest.mobileSocketId}`;
+      io.to(mobileRoom).emit(SocketIOEvents.EmitTelemetryQueryResponse, {
         requestId,
         keySeatDocumentId,
         source: 'realtime',
@@ -196,9 +223,9 @@ function handlePOSTelemetryResponse(
         success: true
       });
 
-      strapi.log.info(`[TelemetryQueryHandler] Forwarded response to mobile`, {
+      strapi.log.info(`[TelemetryQueryHandler] Forwarded response to mobile room`, {
         requestId,
-        mobileSocketId
+        mobileRoom
       });
 
     } catch (error) {
@@ -311,21 +338,17 @@ async function sendFallbackSnapshot(
 /**
  * Cleans up pending requests for a disconnected socket
  * Prevents memory leaks and ensures timeouts are cleared
- * @param socketId - Socket ID that disconnected
+ * @param socket - Socket that disconnected
  * @param strapi - Strapi instance
  */
-function cleanupPendingRequests(socketId: string, strapi: Core.Strapi): void {
-  let cleanedCount = 0;
-  
-  // Iterate through all pending requests and clear those associated with this socket
-  for (const [requestId, timeoutId] of pendingRequests.entries()) {
-    // Clear the timeout
-    clearTimeout(timeoutId);
-    pendingRequests.delete(requestId);
-    cleanedCount++;
-  }
-
-  if (cleanedCount > 0) {
-    strapi.log.info(`[TelemetryQueryHandler] Cleaned up ${cleanedCount} pending requests for socket ${socketId}`);
+async function cleanupPendingRequests(socket: Socket, strapi: Core.Strapi): Promise<void> {
+  try {
+    const cleanedCount = await redisStateManager.cleanupPendingRequestsForSocket(socket.id);
+    
+    if (cleanedCount > 0) {
+      strapi.log.info(`[TelemetryQueryHandler] Cleaned up ${cleanedCount} pending requests for socket ${socket.id}`);
+    }
+  } catch (error) {
+    strapi.log.error(`[TelemetryQueryHandler] Error cleaning up pending requests:`, error);
   }
 }

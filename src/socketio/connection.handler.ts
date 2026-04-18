@@ -10,6 +10,7 @@ import type { Core } from '@strapi/strapi';
 import authenticateUserConnection from '../socketio/services';
 import { setupSeatUpdateHandlers } from './handlers/seat-update.handler';
 import { setupTelemetryQueryHandlers } from './handlers/telemetry-query.handler';
+import { initializeSocketManager, multiReplicaSocketManager } from './socket-manager';
 
 // Constants
 const USER_SOCKET_TTL = 86400; // 24 hours in seconds
@@ -24,6 +25,9 @@ export function setupConnectionHandlers(
   strapi: Core.Strapi
 ): void {
   strapi.log.info('[ConnectionHandler] Setting up connection handlers');
+
+  // Initialize socket manager for multi-replica support
+  initializeSocketManager(io, strapi);
 
   io.on('connection', async (socket: Socket) => {
     strapi.log.info(`[ConnectionHandler] New connection: ${socket.id}`);
@@ -71,6 +75,9 @@ export function setupConnectionHandlers(
           await mapUserToSocket(socket, userInfo);
         }
 
+        // Join appropriate rooms for cross-replica communication
+        await multiReplicaSocketManager.joinUserRooms(socket);
+
         // Set up seat update handlers AFTER socket.data is populated
         setupSeatUpdateHandlers(socket, strapi, io);
         
@@ -81,6 +88,8 @@ export function setupConnectionHandlers(
 
     // Handle disconnection
     socket.on('disconnect', async () => {
+      // Leave rooms before handling disconnection
+      await multiReplicaSocketManager.leaveUserRooms(socket);
       await handleDisconnection(socket, strapi);
     });
   });
@@ -130,6 +139,8 @@ async function getUserInfo(
 
 /**
  * Updates the socket ID in the key-seat table for POS clients
+ * NOTE: This is kept for backward compatibility and monitoring purposes only.
+ * The actual communication uses room-based system, not socket IDs.
  */
 async function updateKeySeatSocketId(
   socket: Socket,
@@ -137,33 +148,33 @@ async function updateKeySeatSocketId(
   strapi: Core.Strapi
 ): Promise<void> {
   try {
-    // Update the socket ID directly using the document ID
+    // Update the socket ID for monitoring/debugging purposes
+    // The room-based system doesn't rely on this
     await strapi.documents('api::key-seat.key-seat').update({
       documentId: keySeatDocumentId,
       status: 'published',
       data: {
-        
-        userSocketId: socket.id,
+        userSocketId: socket.id, // For monitoring only
+        lastConnectedAt: new Date().toISOString(), // Track connection time
       },
     });
-    strapi.log.info(`[ConnectionHandler] Updated key-seat socket ID for key-seat ${keySeatDocumentId}: ${socket.id}`);
+    strapi.log.info(`[ConnectionHandler] Updated key-seat connection info for ${keySeatDocumentId}`);
   } catch (error) {
-    strapi.log.error(`[ConnectionHandler] Error updating key-seat socket ID: ${error}`);
+    strapi.log.error(`[ConnectionHandler] Error updating key-seat connection info: ${error}`);
   }
 }
 
 /**
  * Maps user to socket in Redis
  * Requirement: 6.2
+ * NOTE: Socket ID storage is for monitoring only. Room-based system handles actual communication.
  */
 async function mapUserToSocket(
   socket: Socket,
   userInfo: { role: 'authenticated' | 'none'; documentId: string }
 ): Promise<void> {
   try {
-   
-
-    // Update socket ID in database for drivers
+    // Update socket ID in database for monitoring purposes only
     if (userInfo.role === 'authenticated') {
       await updateUserSocketId(socket, userInfo.documentId);
     }
@@ -171,6 +182,7 @@ async function mapUserToSocket(
     console.error(`[ConnectionHandler] Error mapping user to socket: ${error}`);
   }
 }
+
 async function updateUserSocketId(
   socket: Socket,
   userDocumentId: string
@@ -178,14 +190,14 @@ async function updateUserSocketId(
   try {
     await strapi.documents('plugin::users-permissions.user').update({
       documentId: userDocumentId,
-      
       data: {
-        socketId:socket.id,
+        socketId: socket.id, // For monitoring only
+        lastConnectedAt: new Date().toISOString(),
       },
       status: 'published',
     });
   } catch (error) {
-    console.error(`[ConnectionHandler] Error updating driver socket ID: ${error}`);
+    console.error(`[ConnectionHandler] Error updating user connection info: ${error}`);
   }
 }
 
