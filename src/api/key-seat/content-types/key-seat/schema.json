@@ -19,12 +19,10 @@
       "type": "string"
     },
     "telemetry": {
-      "type": "json",
-      "description": "Initial activation telemetry data (preserved from first connection)"
+      "type": "json"
     },
     "realtimeTelemetry": {
-      "type": "json",
-      "description": "Real-time telemetry updates including business data (lastOrder, kpiSummary, expenses)"
+      "type": "json"
     },
     "isActive": {
       "type": "boolean",
@@ -41,6 +39,14 @@
       "relation": "oneToMany",
       "target": "api::seat-telemetry-history.seat-telemetry-history",
       "mappedBy": "keySeat"
+    },
+    "isConnected": {
+      "type": "boolean"
+    },
+    "timezone": {
+      "type": "string",
+      "default": "UTC",
+      "required": false
     }
   }
 }

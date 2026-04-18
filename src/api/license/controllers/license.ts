@@ -141,7 +141,7 @@ export default factories.createCoreController('api::license.license', ({ strapi 
    */
   async activate(ctx) {
     try {
-      const { licenseKey, machineUUID, telemetry } = ctx.request.body;
+      const { licenseKey, machineUUID, telemetry, timezone } = ctx.request.body;
 
       // Validate required fields
       if (!licenseKey) {
@@ -150,6 +150,23 @@ export default factories.createCoreController('api::license.license', ({ strapi 
 
       if (!machineUUID) {
         return ctx.badRequest('Machine UUID is required');
+      }
+
+      // Validate and sanitize timezone (IANA timezone format)
+      let validatedTimezone = 'UTC'; // Default to UTC
+      if (timezone) {
+        try {
+          // Test if timezone is valid by trying to format a date with it
+          new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
+          validatedTimezone = timezone;
+          strapi.log.info('Valid timezone provided', { timezone, machineUUID });
+        } catch (error) {
+          strapi.log.warn('Invalid timezone provided, defaulting to UTC', {
+            providedTimezone: timezone,
+            machineUUID
+          });
+          // Don't fail activation, just use UTC as fallback
+        }
       }
 
       // Decrypt and validate the license key
@@ -300,6 +317,7 @@ export default factories.createCoreController('api::license.license', ({ strapi 
           status:'published',
           data: { 
             isActive: true,
+            timezone: validatedTimezone, // Update timezone on reactivation
             telemetry: {
               ...telemetry,
               lastActivated: new Date().toISOString()
@@ -362,6 +380,7 @@ export default factories.createCoreController('api::license.license', ({ strapi 
         data: {
           machineUUID,
           isActive: true,
+          timezone: validatedTimezone, // Store timezone for this seat
           license: license.documentId,
           telemetry: {
             ...telemetry,

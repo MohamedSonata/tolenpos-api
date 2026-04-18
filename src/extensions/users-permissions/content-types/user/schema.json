@@ -93,6 +93,10 @@
       "type": "component",
       "component": "user.fcm-token",
       "repeatable": false
+    },
+    "isConnected": {
+      "type": "boolean",
+      "default": false
     }
   }
 }

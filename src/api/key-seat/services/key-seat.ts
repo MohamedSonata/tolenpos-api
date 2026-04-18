@@ -207,7 +207,7 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
   },
 
   /**
-   * Creates daily snapshots for all active seats (used by cron job)
+   * Creates timezone-aware daily snapshots for seats where it's end-of-day in their local timezone
    * @param batchSize - Number of seats to process at once
    * @returns Summary of snapshot creation
    */
@@ -218,10 +218,11 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
         success: 0,
         failed: 0,
         skipped: 0,
+        timezoneChecked: 0,
         errors: [] as any[]
       };
 
-      // Get all active seats with realtime telemetry
+      // Get all active seats with realtime telemetry and timezone
       const seats = await strapi.documents('api::key-seat.key-seat').findMany({
         filters: {
           isActive: true,
@@ -234,6 +235,9 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
 
       summary.total = seats.length;
 
+      // Get current UTC time
+      const nowUTC = new Date();
+
       // Process in batches
       for (let i = 0; i < seats.length; i += batchSize) {
         const batch = seats.slice(i, i + batchSize);
@@ -241,31 +245,67 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
         await Promise.allSettled(
           batch.map(async (seat) => {
             try {
+              summary.timezoneChecked++;
+
               // Skip if no telemetry data or not an object
               if (!seat.realtimeTelemetry || typeof seat.realtimeTelemetry !== 'object') {
                 summary.skipped++;
                 return;
               }
 
-              // Type guard: ensure it's a Record<string, any>
-              const telemetryData = seat.realtimeTelemetry as Record<string, any>;
-              
-              if (Object.keys(telemetryData).length === 0) {
-                summary.skipped++;
-                return;
-              }
+              // Get seat timezone (default to UTC if not set)
+              const seatTimezone = seat.timezone || 'UTC';
 
-              await this.createTelemetrySnapshot(
-                seat.documentId,
-                telemetryData,
-                'daily'
-              );
-              
-              summary.success++;
+              // Calculate local time in seat's timezone
+              const localTime = this.getLocalTimeInTimezone(nowUTC, seatTimezone);
+              const localHour = localTime.getHours();
+              const localMinute = localTime.getMinutes();
+
+              // Only create snapshot if it's between 23:55 and 23:59 in the seat's local time
+              if (localHour === 23 && localMinute >= 55) {
+                // Check if we already created a snapshot today for this seat
+                const today = localTime.toISOString().split('T')[0]; // YYYY-MM-DD
+                const existingSnapshot = await this.hasSnapshotForDate(seat.documentId, today);
+
+                if (existingSnapshot) {
+                  summary.skipped++;
+                  return;
+                }
+
+                // Type guard: ensure it's a Record<string, any>
+                const telemetryData = seat.realtimeTelemetry as Record<string, any>;
+                
+                if (Object.keys(telemetryData).length === 0) {
+                  summary.skipped++;
+                  return;
+                }
+
+                await this.createTelemetrySnapshot(
+                  seat.documentId,
+                  {
+                    ...telemetryData,
+                    snapshotLocalTime: localTime.toISOString(),
+                    snapshotTimezone: seatTimezone
+                  },
+                  'daily'
+                );
+                
+                summary.success++;
+
+                strapi.log.info(`[KeySeatService] Created timezone-aware snapshot for seat ${seat.documentId}`, {
+                  seatTimezone,
+                  localTime: localTime.toISOString(),
+                  utcTime: nowUTC.toISOString()
+                });
+              } else {
+                // Not the right time for this seat's timezone
+                summary.skipped++;
+              }
             } catch (error) {
               summary.failed++;
               summary.errors.push({
                 seatId: seat.documentId,
+                timezone: seat.timezone,
                 error: error.message
               });
             }
@@ -273,13 +313,93 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
         );
       }
 
-      strapi.log.info('[KeySeatService] Daily snapshots completed:', summary);
+      strapi.log.info('[KeySeatService] Timezone-aware daily snapshots completed:', summary);
       return summary;
     } catch (error) {
-      strapi.log.error('[KeySeatService] Error creating daily snapshots:', {
+      strapi.log.error('[KeySeatService] Error creating timezone-aware daily snapshots:', {
         error: error.message
       });
       throw error;
+    }
+  },
+
+  /**
+   * Converts UTC time to local time in specified timezone
+   * @param utcDate - UTC date
+   * @param timezone - Target timezone (e.g., 'America/New_York', 'Asia/Singapore')
+   * @returns Local date in the specified timezone
+   */
+  getLocalTimeInTimezone(utcDate: Date, timezone: string): Date {
+    try {
+      // Use Intl.DateTimeFormat to get the time in the target timezone
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+
+      const parts = formatter.formatToParts(utcDate);
+      const partsObj = parts.reduce((acc, part) => {
+        acc[part.type] = part.value;
+        return acc;
+      }, {} as any);
+
+      // Create local date
+      const localDate = new Date(
+        parseInt(partsObj.year),
+        parseInt(partsObj.month) - 1, // Month is 0-indexed
+        parseInt(partsObj.day),
+        parseInt(partsObj.hour),
+        parseInt(partsObj.minute),
+        parseInt(partsObj.second)
+      );
+
+      return localDate;
+    } catch (error) {
+      strapi.log.error(`[KeySeatService] Error converting timezone ${timezone}:`, error.message);
+      // Fallback to UTC if timezone conversion fails
+      return utcDate;
+    }
+  },
+
+  /**
+   * Checks if a snapshot already exists for a specific date
+   * @param keySeatDocumentId - Document ID of the key-seat
+   * @param dateString - Date string in YYYY-MM-DD format
+   * @returns Boolean indicating if snapshot exists
+   */
+  async hasSnapshotForDate(keySeatDocumentId: string, dateString: string): Promise<boolean> {
+    try {
+      const startOfDay = `${dateString}T00:00:00.000Z`;
+      const endOfDay = `${dateString}T23:59:59.999Z`;
+
+      const snapshots = await strapi.documents('api::seat-telemetry-history.seat-telemetry-history').findMany({
+        filters: {
+          keySeat: {
+            documentId: keySeatDocumentId
+          },
+          snapshotType: 'daily',
+          capturedAt: {
+            $gte: startOfDay,
+            $lte: endOfDay
+          }
+        },
+        limit: 1
+      });
+
+      return snapshots.length > 0;
+    } catch (error) {
+      strapi.log.error('[KeySeatService] Error checking existing snapshot:', {
+        keySeatDocumentId,
+        dateString,
+        error: error.message
+      });
+      return false; // Assume no snapshot exists if check fails
     }
   },
 

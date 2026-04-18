@@ -1,4 +1,5 @@
 import type { Core } from '@strapi/strapi';
+import cronTasks from './cron-tasks';
 
 const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Server => ({
   host: env('HOST', '0.0.0.0'),
@@ -7,6 +8,10 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Server =>
     keys: env.array('APP_KEYS'),
   },
   url: env('APP_URL', 'http://localhost:1334'), // IMPORTANT
+  cron: {
+    enabled: true,
+     tasks: cronTasks, // ✅ Add this line
+  },
 });
 
 export default config;

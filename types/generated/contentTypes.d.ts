@@ -558,6 +558,7 @@ export interface ApiKeySeatKeySeat extends Struct.CollectionTypeSchema {
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    isConnected: Schema.Attribute.Boolean;
     license: Schema.Attribute.Relation<'manyToOne', 'api::license.license'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -573,6 +574,7 @@ export interface ApiKeySeatKeySeat extends Struct.CollectionTypeSchema {
       'oneToMany',
       'api::seat-telemetry-history.seat-telemetry-history'
     >;
+    timezone: Schema.Attribute.String & Schema.Attribute.DefaultTo<'UTC'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1226,6 +1228,7 @@ export interface PluginUsersPermissionsUser
         minLength: 6;
       }>;
     fcmToken: Schema.Attribute.Component<'user.fcm-token', false>;
+    isConnected: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     licenses: Schema.Attribute.Relation<'oneToMany', 'api::license.license'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<

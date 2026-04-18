@@ -1,6 +1,18 @@
 /**
  * Strapi Cron Tasks Configuration
  * Manages scheduled jobs for telemetry snapshots, cleanup, and other periodic tasks
+ * 
+ * TIMEZONE STRATEGY FOR INTERNATIONAL USERS (PER-SEAT TIMEZONE):
+ * ==============================================================
+ * Each key-seat stores its own timezone. The cron job runs hourly and checks:
+ * 1. What time it is in each seat's local timezone
+ * 2. Only creates snapshots for seats where it's 23:55-23:59 in their local time
+ * 3. Ensures each seat gets exactly one snapshot per day at their local end-of-day
+ * 
+ * This approach provides:
+ * - True "end of day" snapshots for each user's timezone
+ * - Flexible support for users in any timezone
+ * - No need to coordinate global timing
  */
 
 import { executeDailySnapshotJob } from "../src/cron/jobs/daily-telemetry-snapshot";
@@ -8,20 +20,26 @@ import { executeCleanupJob } from "../src/cron/jobs/cleanup-old-snapshots";
 
 export default {
   /**
-   * Daily Telemetry Snapshot Job
-   * Creates one snapshot per active seat per day at 2 AM
-   * Reduces storage costs by 99% compared to snapshot-on-every-update
+   * Timezone-Aware Daily Telemetry Snapshot Job
+   * Runs every hour and creates snapshots for seats where it's 23:55 in their local timezone
+   * This ensures each user gets their snapshot at their local "end of day"
    */
   dailyTelemetrySnapshot: {
     task: async ({ strapi }) => {
-      strapi.log.info("[CronTasks] Starting daily telemetry snapshot job");
+      const now = new Date().toISOString();
+      strapi.log.info(`[CronTasks] ⏰ TIMEZONE-AWARE CRON TRIGGERED at ${now} - Starting timezone-aware snapshot job`);
       await executeDailySnapshotJob(strapi);
-      strapi.log.info("[CronTasks] Daily telemetry snapshot job completed");
+      strapi.log.info("[CronTasks] Timezone-aware snapshot job completed");
     },
     options: {
-      // Run at 2 AM every day (configurable via env var)
-      rule: process.env.TELEMETRY_SNAPSHOT_SCHEDULE || "0 2 * * *",
-      tz: process.env.TZ || "UTC",
+      // TIMEZONE-AWARE APPROACH:
+      // Run every hour (at :55 minutes) to check all seat timezones
+      // For each seat, calculate their local time and snapshot if it's 23:55-23:59
+      // 
+      // For testing: "*/1 * * * *" runs every minute
+      // For production: "55 * * * *" runs at :55 of every hour
+      rule: process.env.TELEMETRY_SNAPSHOT_SCHEDULE || "*/1 * * * *",
+      tz: "UTC", // Always use UTC for the cron schedule
     },
   },
 

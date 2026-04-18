@@ -28,7 +28,11 @@
     },
     "snapshotType": {
       "type": "enumeration",
-      "enum": ["realtime", "hourly", "daily"],
+      "enum": [
+        "realtime",
+        "hourly",
+        "daily"
+      ],
       "default": "realtime",
       "required": true
     }

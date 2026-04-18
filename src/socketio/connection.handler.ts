@@ -148,13 +148,14 @@ async function updateKeySeatSocketId(
   strapi: Core.Strapi
 ): Promise<void> {
   try {
-    // Update the socket ID for monitoring/debugging purposes
+    // Update the socket ID and connection status for monitoring/debugging purposes
     // The room-based system doesn't rely on this
     await strapi.documents('api::key-seat.key-seat').update({
       documentId: keySeatDocumentId,
       status: 'published',
       data: {
         userSocketId: socket.id, // For monitoring only
+        isConnected: true, // Mark as connected
         lastConnectedAt: new Date().toISOString(), // Track connection time
       },
     });
@@ -192,6 +193,7 @@ async function updateUserSocketId(
       documentId: userDocumentId,
       data: {
         socketId: socket.id, // For monitoring only
+        isConnected: true, // Mark as connected
         lastConnectedAt: new Date().toISOString(),
       },
       status: 'published',
@@ -249,9 +251,10 @@ async function clearKeySeatSocketId(
     if (keySeat && keySeat.userSocketId === socketId) {
       await strapi.documents('api::key-seat.key-seat').update({
         documentId: keySeatDocumentId,
-          status:'published',
+        status: 'published',
         data: {
           userSocketId: null,
+          isConnected: false, // Mark as disconnected
         },
       });
       strapi.log.info(`[ConnectionHandler] Cleared key-seat socket ID for key-seat ${keySeatDocumentId}`);
@@ -275,6 +278,7 @@ async function clearUserSocketId(
       documentId: userDocumentId,
       data: {
         socketId: null,
+        isConnected: false, // Mark as disconnected
       },
       status: 'published',
     });
