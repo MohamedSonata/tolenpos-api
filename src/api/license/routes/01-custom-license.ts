@@ -23,5 +23,14 @@ export default {
         middlewares: [],
       },
     },
+    {
+      method: 'GET',
+      path: '/licenses/:documentId/seats-insights',
+      handler: 'license.getSeatsInsights',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 };

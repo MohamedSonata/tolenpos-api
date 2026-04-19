@@ -458,6 +458,40 @@ export default factories.createCoreController('api::license.license', ({ strapi 
   },
 
   /**
+   * Custom endpoint to get real-time insights for all seats of a license
+   * GET /api/licenses/:documentId/seats-insights
+   * Returns aggregated KPIs and individual seat telemetry data
+   */
+  async getSeatsInsights(ctx) {
+    try {
+      const { documentId } = ctx.params;
+
+      if (!documentId) {
+        return ctx.badRequest('License documentId is required');
+      }
+
+      // Delegate to service for business logic
+      const insights = await strapi.service('api::license.license').generateSeatsInsights(documentId);
+
+      return ctx.send({
+        data: insights
+      });
+    } catch (error) {
+      strapi.log.error('Failed to generate seats insights:', {
+        documentId: ctx.params.documentId,
+        error: error.message,
+        stack: error.stack
+      });
+
+      if (error.message.includes('not found')) {
+        return ctx.notFound('License not found');
+      }
+
+      return ctx.internalServerError('Failed to generate insights');
+    }
+  },
+
+  /**
    * Custom endpoint to regenerate license key for existing license
    * POST /api/licenses/:documentId/regenerate-key
    * This is useful when license data was updated but the key wasn't regenerated
