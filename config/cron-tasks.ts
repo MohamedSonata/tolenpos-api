@@ -2,6 +2,16 @@
  * Strapi Cron Tasks Configuration
  * Manages scheduled jobs for telemetry snapshots, cleanup, and other periodic tasks
  * 
+ * DOCKER SWARM DISTRIBUTED LOCKING:
+ * =================================
+ * With 3 replicas in Docker Swarm, each instance would normally execute cron jobs independently,
+ * causing duplicate database records (3x for each job). To prevent this:
+ * 
+ * - Each job uses Redis distributed locking (see src/cron/utils/distributed-lock.ts)
+ * - Only ONE replica acquires the lock and executes the job
+ * - Other replicas skip execution (logged as "Job skipped - lock not acquired")
+ * - Lock auto-expires after TTL to prevent deadlocks
+ * 
  * TIMEZONE STRATEGY FOR INTERNATIONAL USERS (PER-SEAT TIMEZONE):
  * ==============================================================
  * Each key-seat stores its own timezone. The cron job runs hourly and checks:
@@ -13,6 +23,7 @@
  * - True "end of day" snapshots for each user's timezone
  * - Flexible support for users in any timezone
  * - No need to coordinate global timing
+ * - Single execution per job across all replicas (via distributed locking)
  */
 
 import { executeDailySnapshotJob } from "../src/cron/jobs/daily-telemetry-snapshot";
@@ -23,6 +34,9 @@ export default {
    * Timezone-Aware Daily Telemetry Snapshot Job
    * Runs every hour and creates snapshots for seats where it's 23:55 in their local timezone
    * This ensures each user gets their snapshot at their local "end of day"
+   * 
+   * DISTRIBUTED LOCKING: Uses Redis lock to ensure only ONE replica executes this job
+   * Lock TTL: 1 hour (job should complete within this time)
    */
   dailyTelemetrySnapshot: {
     task: async ({ strapi }) => {
@@ -47,6 +61,9 @@ export default {
    * Cleanup Old Snapshots Job
    * Deletes telemetry snapshots older than retention period (default: 90 days)
    * Runs weekly on Sunday at 3 AM
+   * 
+   * DISTRIBUTED LOCKING: Uses Redis lock to ensure only ONE replica executes this job
+   * Lock TTL: 2 hours (cleanup might take longer with large datasets)
    */
   cleanupOldSnapshots: {
     task: async ({ strapi }) => {
