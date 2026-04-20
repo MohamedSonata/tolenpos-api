@@ -75,37 +75,26 @@ function handlePOSSeatUpdate(
         return;
       }
 
-      // Extract historicalKpiSummary from realtimeTelemetry if it exists there
-      let historicalKpiSummary = payload.historicalKpiSummary;
-      let realtimeTelemetry = payload.realtimeTelemetry;
-
-      // Check if historicalKpiSummary is nested inside realtimeTelemetry
-      if (!historicalKpiSummary && realtimeTelemetry?.historicalKpiSummary) {
-     
-        
-        // Remove it from realtimeTelemetry to avoid duplication
-        const { historicalKpiSummary: _, ...cleanRealtimeTelemetry } = realtimeTelemetry;
-        realtimeTelemetry = cleanRealtimeTelemetry;
-      }
+      // Extract fields from payload
+      const { realtimeTelemetry, historicalKpiSummary } = payload;
 
       // Log incoming payload structure
-      strapi.log.info(`[SeatUpdateHandler] Received seat update payload for ${keySeatDocumentId}`);
-      strapi.log.info(`[SeatUpdateHandler] Payload analysis:
-        - hasRealtimeTelemetry: ${!!realtimeTelemetry}
-        - hasHistoricalKpiSummary: ${!!historicalKpiSummary}
-       `);
-
-      // Log real-time telemetry data structure for debugging
-      const telemetryKeys = Object.keys(realtimeTelemetry || {});
-      strapi.log.info(`[SeatUpdateHandler] Processing seat update for ${keySeatDocumentId}`, {
-        telemetryFields: telemetryKeys,
-        hasLastOrder: !!realtimeTelemetry?.lastOrder,
-        hasKpiSummary: !!realtimeTelemetry?.kpiSummary,
-        hasExpenses: !!realtimeTelemetry?.expenses,
-        expensesCount: realtimeTelemetry?.expenses?.length || 0
+      strapi.log.info(`[SeatUpdateHandler] Received seat update for ${keySeatDocumentId}`, {
+        hasRealtimeTelemetry: !!realtimeTelemetry,
+        hasHistoricalKpiSummary: !!historicalKpiSummary,
+        realtimeTelemetryKeys: realtimeTelemetry ? Object.keys(realtimeTelemetry) : [],
+        historicalKpiSummaryKeys: historicalKpiSummary ? Object.keys(historicalKpiSummary) : []
       });
 
-      // Update seat real-time telemetry via service
+      // Log incoming payload structure
+      strapi.log.info(`[SeatUpdateHandler] Received seat update for ${keySeatDocumentId}`, {
+        hasRealtimeTelemetry: !!realtimeTelemetry,
+        hasHistoricalKpiSummary: !!historicalKpiSummary,
+        realtimeTelemetryKeys: realtimeTelemetry ? Object.keys(realtimeTelemetry) : [],
+        historicalKpiSummaryKeys: historicalKpiSummary ? Object.keys(historicalKpiSummary) : []
+      });
+
+      // Update seat telemetry via service
       const service = strapi.service('api::key-seat.key-seat');
       const updatedSeat = await service.updateSeatTelemetry(
         keySeatDocumentId,
@@ -122,12 +111,7 @@ function handlePOSSeatUpdate(
       strapi.log.info(`[SeatUpdateHandler] Seat updated successfully: ${keySeatDocumentId}`);
 
       // Notify subscribed mobile apps
-      await notifyMobileAppsOfSeatUpdate(
-        io,
-        strapi,
-        updatedSeat,
-        socket.data.userId
-      );
+      await notifyMobileAppsOfSeatUpdate(io, strapi, updatedSeat, socket.data.userId);
     } catch (error) {
       strapi.log.error(`[SeatUpdateHandler] Error updating seat: ${error.message}`, {
         socketId: socket.id,
