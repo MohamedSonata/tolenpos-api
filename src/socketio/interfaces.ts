@@ -168,9 +168,43 @@ interface TelemetryData {
   // Allow additional custom fields
   [key: string]: any;
 }
-
+ interface CategorySalesSummary {
+  categoryId: string
+  categoryName: string
+  totalRevenue: number
+  totalQuantitySold: number
+  transactionCount: number
+}
+ interface HistoricalKPISummary {
+  yesterday: {
+    totalSales: number
+    transactionCount: number
+    averageTransactionValue: number
+    grossProfit: number
+    marginPercentage: number
+    categories: CategorySalesSummary[]
+  }
+  thisWeek: {
+    totalSales: number
+    transactionCount: number
+    averageTransactionValue: number
+    grossProfit: number
+    marginPercentage: number
+    categories: CategorySalesSummary[]
+  }
+  thisMonth: {
+    totalSales: number
+    transactionCount: number
+    averageTransactionValue: number
+    grossProfit: number
+    marginPercentage: number
+    categories: CategorySalesSummary[]
+  }
+  cachedAt: string // ISO 8601 timestamp when data was cached
+}
 interface SeatUpdatePayload {
   realtimeTelemetry: TelemetryData;  // Real-time telemetry updates from POS
+  historicalKpiSummary: HistoricalKPISummary;  // Real-time telemetry updates from POS
 }
 
 interface SeatSubscribePayload {
@@ -248,4 +282,6 @@ export {
   TelemetryQueryResponse,
   TelemetryQueryError,
   TelemetryQueryResult,
+  HistoricalKPISummary,
+  CategorySalesSummary,
 }

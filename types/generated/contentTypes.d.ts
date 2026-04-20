@@ -557,6 +557,7 @@ export interface ApiKeySeatKeySeat extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    historicalKpiSummary: Schema.Attribute.JSON;
     isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isConnected: Schema.Attribute.Boolean;
     license: Schema.Attribute.Relation<'manyToOne', 'api::license.license'>;

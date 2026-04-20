@@ -47,6 +47,9 @@
       "type": "string",
       "default": "UTC",
       "required": false
+    },
+    "historicalKpiSummary": {
+      "type": "json"
     }
   }
 }

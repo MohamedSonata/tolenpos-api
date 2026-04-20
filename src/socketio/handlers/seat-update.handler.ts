@@ -75,21 +75,42 @@ function handlePOSSeatUpdate(
         return;
       }
 
+      // Extract historicalKpiSummary from realtimeTelemetry if it exists there
+      let historicalKpiSummary = payload.historicalKpiSummary;
+      let realtimeTelemetry = payload.realtimeTelemetry;
+
+      // Check if historicalKpiSummary is nested inside realtimeTelemetry
+      if (!historicalKpiSummary && realtimeTelemetry?.historicalKpiSummary) {
+     
+        
+        // Remove it from realtimeTelemetry to avoid duplication
+        const { historicalKpiSummary: _, ...cleanRealtimeTelemetry } = realtimeTelemetry;
+        realtimeTelemetry = cleanRealtimeTelemetry;
+      }
+
+      // Log incoming payload structure
+      strapi.log.info(`[SeatUpdateHandler] Received seat update payload for ${keySeatDocumentId}`);
+      strapi.log.info(`[SeatUpdateHandler] Payload analysis:
+        - hasRealtimeTelemetry: ${!!realtimeTelemetry}
+        - hasHistoricalKpiSummary: ${!!historicalKpiSummary}
+       `);
+
       // Log real-time telemetry data structure for debugging
-      const telemetryKeys = Object.keys(payload.realtimeTelemetry || {});
+      const telemetryKeys = Object.keys(realtimeTelemetry || {});
       strapi.log.info(`[SeatUpdateHandler] Processing seat update for ${keySeatDocumentId}`, {
         telemetryFields: telemetryKeys,
-        hasLastOrder: !!payload.realtimeTelemetry?.lastOrder,
-        hasKpiSummary: !!payload.realtimeTelemetry?.kpiSummary,
-        hasExpenses: !!payload.realtimeTelemetry?.expenses,
-        expensesCount: payload.realtimeTelemetry?.expenses?.length || 0
+        hasLastOrder: !!realtimeTelemetry?.lastOrder,
+        hasKpiSummary: !!realtimeTelemetry?.kpiSummary,
+        hasExpenses: !!realtimeTelemetry?.expenses,
+        expensesCount: realtimeTelemetry?.expenses?.length || 0
       });
 
       // Update seat real-time telemetry via service
       const service = strapi.service('api::key-seat.key-seat');
       const updatedSeat = await service.updateSeatTelemetry(
         keySeatDocumentId,
-        payload.realtimeTelemetry
+        realtimeTelemetry,
+        historicalKpiSummary
       );
 
       // Emit success to POS client

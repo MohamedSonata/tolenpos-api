@@ -13,9 +13,19 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
    */
   async updateSeatTelemetry(
     keySeatDocumentId: string,
-    realtimeTelemetry: Record<string, any>
+    realtimeTelemetry: Record<string, any>,
+    historicalKpiSummary: Record<string, any>
   ) {
     try {
+      strapi.log.info(`[KeySeatService] updateSeatTelemetry called for ${keySeatDocumentId}`);
+      strapi.log.info(`[KeySeatService] Parameters:
+        - hasRealtimeTelemetry: ${!!realtimeTelemetry}
+        - hasHistoricalKpiSummary: ${!!historicalKpiSummary}
+        - historicalKpiSummaryKeys: ${historicalKpiSummary ? JSON.stringify(Object.keys(historicalKpiSummary)) : '[]'}
+        - realtimeTelemetryKeys: ${realtimeTelemetry ? JSON.stringify(Object.keys(realtimeTelemetry)) : '[]'}
+        - historicalKpiSummary type: ${typeof historicalKpiSummary}
+        - historicalKpiSummary value: ${historicalKpiSummary ? JSON.stringify(historicalKpiSummary).substring(0, 300) : 'null'}`);
+
       // Validate seat exists and get license info
       const existingSeat = await strapi.documents('api::key-seat.key-seat').findOne({
         documentId: keySeatDocumentId,
@@ -27,19 +37,51 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
         throw new Error(`Key-seat not found: ${keySeatDocumentId}`);
       }
 
+      strapi.log.info(`[KeySeatService] Existing seat before update:
+        - keySeatDocumentId: ${keySeatDocumentId}
+        - hasExistingHistoricalKpiSummary: ${!!existingSeat.historicalKpiSummary}
+        - hasExistingRealtimeTelemetry: ${!!existingSeat.realtimeTelemetry}
+        - existingHistoricalKpiSummary: ${existingSeat.historicalKpiSummary ? JSON.stringify(existingSeat.historicalKpiSummary).substring(0, 200) : 'null'}`);
+
+      // Prepare update data
+      const updateData: any = {
+        realtimeTelemetry: {
+          ...realtimeTelemetry,
+          lastUpdated: new Date().toISOString()
+        }
+      };
+
+      // Only update historicalKpiSummary if provided
+      if (historicalKpiSummary && Object.keys(historicalKpiSummary).length > 0) {
+        updateData.historicalKpiSummary = historicalKpiSummary;
+        strapi.log.info(`[KeySeatService] ✅ Adding historicalKpiSummary to update:
+          - Data: ${JSON.stringify(historicalKpiSummary).substring(0, 300)}`);
+      } else {
+        strapi.log.warn(`[KeySeatService] ⚠️ NOT adding historicalKpiSummary:
+          - historicalKpiSummary is: ${historicalKpiSummary}
+          - type: ${typeof historicalKpiSummary}
+          - keys length: ${historicalKpiSummary ? Object.keys(historicalKpiSummary).length : 0}`);
+      }
+
+      strapi.log.info(`[KeySeatService] Update data prepared:
+        - updateDataKeys: ${JSON.stringify(Object.keys(updateData))}
+        - hasHistoricalKpiSummaryInUpdate: ${!!updateData.historicalKpiSummary}
+        - Full update data: ${JSON.stringify(updateData).substring(0, 500)}`);
+
       // Update real-time telemetry in key-seat (preserves initial activation telemetry)
       const updatedSeat = await strapi.documents('api::key-seat.key-seat').update({
         documentId: keySeatDocumentId,
-       status:'published',
-        data: {
-          
-          realtimeTelemetry: {
-            ...realtimeTelemetry,
-            lastUpdated: new Date().toISOString()
-          }
-        } as any,
+        status:'published',
+        data: updateData,
         populate: ['license']
       });
+
+      strapi.log.info(`[KeySeatService] Seat updated successfully:
+        - keySeatDocumentId: ${keySeatDocumentId}
+        - hasHistoricalKpiSummaryAfterUpdate: ${!!updatedSeat.historicalKpiSummary}
+        - hasRealtimeTelemetryAfterUpdate: ${!!updatedSeat.realtimeTelemetry}
+        - updatedAt: ${updatedSeat.updatedAt}
+        - historicalKpiSummary after update: ${updatedSeat.historicalKpiSummary ? JSON.stringify(updatedSeat.historicalKpiSummary).substring(0, 300) : 'null'}`);
 
       // Note: Automatic snapshots removed to reduce storage costs
       // Daily snapshots are created via cron job
