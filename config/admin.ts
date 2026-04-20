@@ -1,9 +1,11 @@
 import type { Core } from '@strapi/strapi';
 
 const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Admin => ({
+  url: env('ADMIN_URL', '/admin'),
+  serveAdminPanel: env.bool('SERVE_ADMIN', true),
   auth: {
     secret: env('ADMIN_JWT_SECRET'),
-           sessions: {
+    sessions: {
       // How long admin session is valid
       maxSessionLifespan: 60 * 60 * 24, // 24 hours (in seconds)
 

@@ -7,10 +7,11 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Server =>
   app: {
     keys: env.array('APP_KEYS'),
   },
-  url: env('APP_URL', 'http://localhost:1334'), // IMPORTANT
+  url: env('APP_URL', 'http://localhost:1334'),
+  proxy: env.bool('IS_PROXIED', true),
   cron: {
     enabled: true,
-     tasks: cronTasks, // ✅ Add this line
+    tasks: cronTasks,
   },
 });
 
