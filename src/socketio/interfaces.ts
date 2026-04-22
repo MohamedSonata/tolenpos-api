@@ -14,6 +14,21 @@ type DocumentID = string;
 export type { DateTimeValue, ID, DocumentID, Data, Media };
 
 
+// FCM Token Component Interface
+interface FCMTokenComponent {
+  id?: ID;
+  token: string;
+  deviceId: string;
+  deviceName?: string;
+  platform: 'ios' | 'android' | 'web';
+  lastUpdatedAt?: DateTimeValue;
+  isActive?: boolean;
+}
+
+// Export FCM Token type
+export type { FCMTokenComponent };
+
+
 
 
 interface NotificationBody<T> {

@@ -27,6 +27,17 @@ export default {
       
       // Note: Cron jobs are now managed by Strapi's native cron system
       // See config/cron-tasks.ts for cron job configuration
-      strapi.log.info("[Bootstrap] Strapi cron jobs will be initialized automatically");
+      const cronSchedule = process.env.TELEMETRY_SNAPSHOT_SCHEDULE || "*/1 * * * *";
+      const hostname = process.env.HOSTNAME || 'unknown';
+      strapi.log.info(`[Bootstrap] Strapi cron jobs initialized on ${hostname}`);
+      strapi.log.info(`[Bootstrap] Daily snapshot schedule: ${cronSchedule} (UTC)`);
+      strapi.log.info(`[Bootstrap] Cleanup schedule: ${process.env.TELEMETRY_CLEANUP_SCHEDULE || "0 3 * * 0"} (${process.env.TZ || "UTC"})`);
+      
+      // List all registered cron jobs after a short delay to ensure they're loaded
+      setTimeout(() => {
+        const cronJobs = strapi.cron?.jobs || {};
+        const jobNames = Object.keys(cronJobs);
+        strapi.log.info(`[Bootstrap] Registered cron jobs (${jobNames.length}):`, jobNames);
+      }, 2000);
   },
 };

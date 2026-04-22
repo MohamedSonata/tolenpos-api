@@ -270,6 +270,7 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
               const localHour = localTime.getHours();
               const localMinute = localTime.getMinutes();
 
+               strapi.log.info(`[KeySeatService] Local Time:${localTime}`);
               // Only create snapshot if it's between 23:55 and 23:59 in the seat's local time
               if (localHour === 23 && localMinute >= 55) {
                 // Check if we already created a snapshot today for this seat

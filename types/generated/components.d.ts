@@ -83,11 +83,17 @@ export interface ReleaseChangeLogITemsReleaseChangeLogITems
 export interface UserFcmToken extends Struct.ComponentSchema {
   collectionName: 'components_user_fcm_tokens';
   info: {
+    description: 'Firebase Cloud Messaging token for push notifications';
     displayName: 'FCM-Token';
   };
   attributes: {
+    deviceId: Schema.Attribute.String & Schema.Attribute.Required;
+    deviceName: Schema.Attribute.String;
+    isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     lastUpdatedAt: Schema.Attribute.DateTime;
-    token: Schema.Attribute.String;
+    platform: Schema.Attribute.Enumeration<['ios', 'android', 'web']> &
+      Schema.Attribute.Required;
+    token: Schema.Attribute.String & Schema.Attribute.Required;
   };
 }
 

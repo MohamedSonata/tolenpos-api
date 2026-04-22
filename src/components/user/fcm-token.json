@@ -1,15 +1,33 @@
 {
   "collectionName": "components_user_fcm_tokens",
   "info": {
-    "displayName": "FCM-Token"
+    "displayName": "FCM-Token",
+    "description": "Firebase Cloud Messaging token for push notifications"
   },
   "options": {},
   "attributes": {
     "token": {
+      "type": "string",
+      "required": true
+    },
+    "deviceId": {
+      "type": "string",
+      "required": true
+    },
+    "deviceName": {
       "type": "string"
+    },
+    "platform": {
+      "type": "enumeration",
+      "enum": ["ios", "android", "web"],
+      "required": true
     },
     "lastUpdatedAt": {
       "type": "datetime"
+    },
+    "isActive": {
+      "type": "boolean",
+      "default": true
     }
   },
   "config": {}

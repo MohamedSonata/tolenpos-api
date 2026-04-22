@@ -26,8 +26,12 @@
  * - Single execution per job across all replicas (via distributed locking)
  */
 
+import type { Core } from '@strapi/strapi';
 import { executeDailySnapshotJob } from "../src/cron/jobs/daily-telemetry-snapshot";
 import { executeCleanupJob } from "../src/cron/jobs/cleanup-old-snapshots";
+
+// Log when this module is loaded
+console.log('[CronTasks] Cron tasks configuration module loaded');
 
 export default {
   /**
@@ -39,11 +43,18 @@ export default {
    * Lock TTL: 1 hour (job should complete within this time)
    */
   dailyTelemetrySnapshot: {
-    task: async ({ strapi }) => {
+    task: ({ strapi }: { strapi: Core.Strapi }) => {
       const now = new Date().toISOString();
-      strapi.log.info(`[CronTasks] ⏰ TIMEZONE-AWARE CRON TRIGGERED at ${now} - Starting timezone-aware snapshot job`);
-      await executeDailySnapshotJob(strapi);
-      strapi.log.info("[CronTasks] Timezone-aware snapshot job completed");
+      const hostname = process.env.HOSTNAME || 'unknown';
+      strapi.log.info(`[CronTasks] ⏰ TIMEZONE-AWARE CRON TRIGGERED at ${now} on ${hostname} - Starting timezone-aware snapshot job`);
+      
+      executeDailySnapshotJob(strapi)
+        .then(() => {
+          strapi.log.info(`[CronTasks] Timezone-aware snapshot job completed successfully on ${hostname}`);
+        })
+        .catch((error) => {
+          strapi.log.error(`[CronTasks] Timezone-aware snapshot job failed on ${hostname}:`, error);
+        });
     },
     options: {
       // TIMEZONE-AWARE APPROACH:
@@ -53,6 +64,7 @@ export default {
       // For testing: "*/1 * * * *" runs every minute
       // For production: "55 * * * *" runs at :55 of every hour
       rule: process.env.TELEMETRY_SNAPSHOT_SCHEDULE || "*/1 * * * *",
+      // rule: "*/1 * * * *",
       tz: "UTC", // Always use UTC for the cron schedule
     },
   },
@@ -66,10 +78,17 @@ export default {
    * Lock TTL: 2 hours (cleanup might take longer with large datasets)
    */
   cleanupOldSnapshots: {
-    task: async ({ strapi }) => {
-      strapi.log.info("[CronTasks] Starting cleanup old snapshots job");
-      await executeCleanupJob(strapi);
-      strapi.log.info("[CronTasks] Cleanup old snapshots job completed");
+    task: ({ strapi }: { strapi: Core.Strapi }) => {
+      const hostname = process.env.HOSTNAME || 'unknown';
+      strapi.log.info(`[CronTasks] Starting cleanup old snapshots job on ${hostname}`);
+      
+      executeCleanupJob(strapi)
+        .then(() => {
+          strapi.log.info(`[CronTasks] Cleanup old snapshots job completed successfully on ${hostname}`);
+        })
+        .catch((error) => {
+          strapi.log.error(`[CronTasks] Cleanup old snapshots job failed on ${hostname}:`, error);
+        });
     },
     options: {
       // Run at 3 AM every Sunday (configurable via env var)

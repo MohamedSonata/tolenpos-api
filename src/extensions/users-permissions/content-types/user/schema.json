@@ -86,17 +86,17 @@
       "relation": "oneToOne",
       "target": "api::subscription-plan.subscription-plan"
     },
-    "socketId": {
-      "type": "string"
-    },
     "socketConnectionStatus": {
       "type": "boolean",
       "default": false
     },
-    "fcmToken": {
+    "lastConnectedAt": {
+      "type": "datetime"
+    },
+    "fcmTokens": {
       "type": "component",
       "component": "user.fcm-token",
-      "repeatable": false
+      "repeatable": true
     }
   }
 }

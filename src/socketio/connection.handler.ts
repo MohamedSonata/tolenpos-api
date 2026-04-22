@@ -90,7 +90,7 @@ export function setupConnectionHandlers(
     socket.on('disconnect', async () => {
       // Leave rooms before handling disconnection
       await multiReplicaSocketManager.leaveUserRooms(socket);
-      await handleDisconnection(socket, strapi);
+      await handleDisconnection(socket, strapi, io);
     });
   });
 }
@@ -155,8 +155,9 @@ async function updateKeySeatSocketId(
       status: 'published',
       data: {
         userSocketId: socket.id, // For monitoring only
-        socketConnectionStatus: true, // Mark as connected
-        lastConnectedAt: new Date().toISOString(), // Track connection time
+     //   socketConnectionStatus: true, // Mark as connected
+        isConnected: true, // Mark as connected
+      //  lastConnectedAt: new Date().toISOString(), // Track connection time
       },
     });
     strapi.log.info(`[ConnectionHandler] Updated key-seat connection info for ${keySeatDocumentId}`);
@@ -168,38 +169,44 @@ async function updateKeySeatSocketId(
 /**
  * Maps user to socket in Redis
  * Requirement: 6.2
- * NOTE: Socket ID storage is for monitoring only. Room-based system handles actual communication.
+ * NOTE: Room-based system handles actual communication. No socket ID storage needed.
  */
 async function mapUserToSocket(
   socket: Socket,
   userInfo: { role: 'authenticated' | 'none'; documentId: string }
 ): Promise<void> {
   try {
-    // Update socket ID in database for monitoring purposes only
+    // Only update connection status, not socket ID (supports multiple devices)
     if (userInfo.role === 'authenticated') {
-      await updateUserSocketId(socket, userInfo.documentId);
+      await updateUserConnectionStatus(socket, userInfo.documentId, true);
     }
   } catch (error) {
     console.error(`[ConnectionHandler] Error mapping user to socket: ${error}`);
   }
 }
 
-async function updateUserSocketId(
+/**
+ * Updates user connection status without storing socket ID
+ * This allows multiple devices to be connected simultaneously
+ */
+async function updateUserConnectionStatus(
   socket: Socket,
-  userDocumentId: string
+  userDocumentId: string,
+  isConnected: boolean
 ): Promise<void> {
   try {
     await strapi.documents('plugin::users-permissions.user').update({
       documentId: userDocumentId,
       data: {
-        socketId: socket.id, // For monitoring only
-        socketConnectionStatus: true, // Mark as connected
+        socketConnectionStatus: isConnected,
         lastConnectedAt: new Date().toISOString(),
       },
       status: 'published',
     });
+    
+    strapi.log.info(`[ConnectionHandler] Updated connection status for user ${userDocumentId}: ${isConnected}`);
   } catch (error) {
-    console.error(`[ConnectionHandler] Error updating user connection info: ${error}`);
+    console.error(`[ConnectionHandler] Error updating user connection status: ${error}`);
   }
 }
 
@@ -209,7 +216,8 @@ async function updateUserSocketId(
  */
 async function handleDisconnection(
   socket: Socket,
-  strapi: Core.Strapi
+  strapi: Core.Strapi,
+  io: SocketIOServer
 ): Promise<void> {
   strapi.log.info(`[ConnectionHandler] Socket disconnected: ${socket.id}`);
 
@@ -227,7 +235,7 @@ async function handleDisconnection(
       await clearKeySeatSocketId(keySeatDocumentId, socket.id, strapi);
     } else if (clientType === 'mobile') {
       // Clear user socket ID for mobile clients
-      await clearUserSocketId(documentId, strapi);
+      await clearUserSocketId(documentId, strapi, io);
     }
   } catch (error) {
     strapi.log.error(`[ConnectionHandler] Error handling disconnection: ${error}`);
@@ -267,24 +275,36 @@ async function clearKeySeatSocketId(
 }
 
 /**
- * Clears the socket ID from user table for mobile clients
+ * Updates user connection status on disconnect
+ * NOTE: We don't set socketConnectionStatus to false immediately because
+ * the user might have other devices still connected. The status is managed
+ * by checking if any sockets exist in the user's room.
  */
 async function clearUserSocketId(
   userDocumentId: string,
-  strapi: Core.Strapi
+  strapi: Core.Strapi,
+  io: SocketIOServer
 ): Promise<void> {
   try {
-    await strapi.documents('plugin::users-permissions.user').update({
-      documentId: userDocumentId,
-      data: {
-        socketId: null,
-        socketConnectionStatus: false, // Mark as disconnected
-      },
-      status: 'published',
-    });
-    strapi.log.info(`[ConnectionHandler] Cleared user socket ID for user ${userDocumentId}`);
+    // Check if user has other active connections in their room
+    const roomName = `user:${userDocumentId}:seats`;
+    const socketsInRoom = await io.in(roomName).fetchSockets();
+    
+    // Only mark as disconnected if no other devices are connected
+    if (socketsInRoom.length === 0) {
+      await strapi.documents('plugin::users-permissions.user').update({
+        documentId: userDocumentId,
+        data: {
+          socketConnectionStatus: false,
+        },
+        status: 'published',
+      });
+      strapi.log.info(`[ConnectionHandler] User ${userDocumentId} fully disconnected (no devices remaining)`);
+    } else {
+      strapi.log.info(`[ConnectionHandler] User ${userDocumentId} still has ${socketsInRoom.length} device(s) connected`);
+    }
   } catch (error) {
-    strapi.log.error(`[ConnectionHandler] Error clearing user socket ID: ${error}`);
+    strapi.log.error(`[ConnectionHandler] Error updating user connection status: ${error}`);
   }
 }
 
@@ -362,8 +382,27 @@ function getPlanFeatures(planType: string): Record<string, any> {
 }
 
 /**
+ * Gets count of connected devices for a user
+ * Useful for monitoring and debugging multi-device connections
+ */
+export async function getConnectedDeviceCount(
+  userDocumentId: string,
+  io: SocketIOServer
+): Promise<number> {
+  try {
+    const roomName = `user:${userDocumentId}:seats`;
+    const socketsInRoom = await io.in(roomName).fetchSockets();
+    return socketsInRoom.length;
+  } catch (error) {
+    console.error(`[ConnectionHandler] Error getting connected device count: ${error}`);
+    return 0;
+  }
+}
+
+/**
  * Notifies all POS machines for a user about plan changes
  * Call this when a user upgrades/downgrades their plan
+ * Uses room-based communication for multi-replica support
  */
 export async function notifyPOSMachinesOfPlanChange(
   userDocumentId: string,
@@ -386,7 +425,7 @@ export async function notifyPOSMachinesOfPlanChange(
     const planFeatures = getPlanFeatures(newPlanType);
     let notifiedCount = 0;
 
-    // Emit to all connected POS machines
+    // Emit to all connected POS machines using room-based system
     for (const license of licenses) {
       // Update license plan type
       await strapi.documents('api::license.license').update({
@@ -394,23 +433,30 @@ export async function notifyPOSMachinesOfPlanChange(
         data: { planSubscriptionType: newPlanType as 'FreeTrial' | 'Pro' | 'Enterprise' },
       });
 
-      // Notify connected POS machines
+      // Notify connected POS machines via their seat rooms
       if (license.seats) {
         for (const seat of license.seats) {
-          if (seat.isActive && seat.userSocketId) {
-            io.to(seat.userSocketId).emit('plan:updated', {
-              planType: newPlanType,
-              features: planFeatures,
-              effectiveDate: new Date().toISOString()
-            });
-            notifiedCount++;
-            strapi.log.info(`[ConnectionHandler] Notified POS machine ${seat.machineUUID} of plan change`);
+          if (seat.isActive && seat.documentId) {
+            const seatRoomName = `seat:${seat.documentId}`;
+            
+            // Check if seat has connected devices
+            const socketsInRoom = await io.in(seatRoomName).fetchSockets();
+            
+            if (socketsInRoom.length > 0) {
+              io.to(seatRoomName).emit('plan:updated', {
+                planType: newPlanType,
+                features: planFeatures,
+                effectiveDate: new Date().toISOString()
+              });
+              notifiedCount += socketsInRoom.length;
+              strapi.log.info(`[ConnectionHandler] Notified ${socketsInRoom.length} POS instance(s) for seat ${seat.machineUUID}`);
+            }
           }
         }
       }
     }
 
-    strapi.log.info(`[ConnectionHandler] Plan change notification sent to ${notifiedCount} POS machines`);
+    strapi.log.info(`[ConnectionHandler] Plan change notification sent to ${notifiedCount} POS instance(s)`);
   } catch (error) {
     strapi.log.error(`[ConnectionHandler] Error notifying POS machines of plan change: ${error}`);
   }

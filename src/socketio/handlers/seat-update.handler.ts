@@ -247,13 +247,20 @@ async function notifyMobileAppsOfSeatUpdate(
       licenseDocumentId: licenseDocumentId
     };
 
-    // Emit to user-specific room (works across all replicas)
+    // Emit to user-specific room (works across all replicas and all devices)
     const roomName = `user:${ownerDocumentId}:seats`;
+    
+    // Get count of connected devices in this room
+    const socketsInRoom = await io.in(roomName).fetchSockets();
+    const deviceCount = socketsInRoom.length;
+    
+    // Emit to ALL devices in the room
     io.to(roomName).emit(SocketIOEvents.EmitSeatUpdated, notificationPayload);
 
-    strapi.log.info(`[SeatUpdateHandler] Notified mobile apps in room ${roomName}`, {
+    strapi.log.info(`[SeatUpdateHandler] Notified ${deviceCount} mobile device(s) in room ${roomName}`, {
       machineUUID: updatedSeat.machineUUID,
       ownerDocumentId,
+      deviceCount,
       hasLastOrder: !!updatedSeat.realtimeTelemetry?.lastOrder,
       hasKpiSummary: !!updatedSeat.realtimeTelemetry?.kpiSummary,
       expensesCount: updatedSeat.realtimeTelemetry?.expenses?.length || 0
