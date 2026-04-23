@@ -62,8 +62,8 @@ export default {
       // For each seat, calculate their local time and snapshot if it's 23:55-23:59
       // 
       // For testing: "*/1 * * * *" runs every minute
-      // For production: "55 * * * *" runs at :55 of every hour
-      rule: process.env.TELEMETRY_SNAPSHOT_SCHEDULE || "*/1 * * * *",
+      // For production: "55 * * * *" runs at minute 55 of every hour
+      rule: process.env.TELEMETRY_SNAPSHOT_SCHEDULE || "55 * * * *",
       // rule: "*/1 * * * *",
       tz: "UTC", // Always use UTC for the cron schedule
     },

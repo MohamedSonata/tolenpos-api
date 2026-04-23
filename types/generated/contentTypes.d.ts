@@ -504,6 +504,7 @@ export interface ApiAppReleaseAppRelease extends Struct.SingleTypeSchema {
     downloadCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     fileName: Schema.Attribute.String & Schema.Attribute.Required;
     fileSize: Schema.Attribute.BigInteger & Schema.Attribute.Required;
+    forceUpdate: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     gracePeriodHours: Schema.Attribute.Integer;
     isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     isCritical: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;

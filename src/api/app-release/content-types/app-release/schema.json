@@ -120,6 +120,10 @@
     },
     "gracePeriodHours": {
       "type": "integer"
+    },
+    "forceUpdate": {
+      "type": "boolean",
+      "default": false
     }
   }
 }
