@@ -133,6 +133,7 @@ build
 *.env
 .env.production
 .env.
+.env.production.frontend
 # Firebase service account keys
 *firebase-adminsdk*.json
 tolen-pos-2026-firebase-adminsdk-fbsvc-5c14f37599.json
