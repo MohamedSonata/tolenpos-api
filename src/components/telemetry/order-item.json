@@ -1,0 +1,24 @@
+{
+  "collectionName": "components_telemetry_order_items",
+  "info": {
+    "displayName": "Order Item",
+    "description": "Individual item in an order"
+  },
+  "options": {},
+  "attributes": {
+    "productName": {
+      "type": "string",
+      "required": true
+    },
+    "quantity": {
+      "type": "integer",
+      "required": true,
+      "min": 1
+    },
+    "price": {
+      "type": "decimal",
+      "required": true,
+      "min": 0
+    }
+  }
+}

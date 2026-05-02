@@ -1,0 +1,44 @@
+{
+  "collectionName": "components_telemetry_last_orders",
+  "info": {
+    "displayName": "Last Order",
+    "description": "Most recent order details"
+  },
+  "options": {},
+  "attributes": {
+    "receiptNumber": {
+      "type": "string",
+      "required": true
+    },
+    "total": {
+      "type": "decimal",
+      "required": true
+    },
+    "itemCount": {
+      "type": "integer",
+      "required": true,
+      "min": 0
+    },
+    "paymentMethod": {
+      "type": "enumeration",
+      "enum": ["CASH", "CARD", "DIGITAL_WALLET", "CREDIT"],
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["PENDING", "COMPLETED", "CANCELLED", "REFUNDED"],
+      "default": "PENDING",
+      "required": true
+    },
+    "createdAt": {
+      "type": "datetime",
+      "required": true
+    },
+    "items": {
+      "type": "component",
+      "repeatable": true,
+      "component": "telemetry.order-item",
+      "required": true
+    }
+  }
+}

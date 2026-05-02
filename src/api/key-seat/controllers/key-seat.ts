@@ -34,10 +34,17 @@ export default factories.createCoreController('api::key-seat.key-seat', ({ strap
 
       strapi.log.info('[KeySeatController] Found seats:', seats.length);
 
+      // Aggregate KPI data across all seats
+      const aggregatedKpi = service.aggregateSeatsKpi(seats);
+
       return ctx.send({
         data: seats,
         meta: {
-          total: seats.length
+          total: seats.length,
+          today: aggregatedKpi.today,
+          yesterday: aggregatedKpi.yesterday,
+          thisWeek: aggregatedKpi.thisWeek,
+          thisMonth: aggregatedKpi.thisMonth
         }
       });
     } catch (error) {
@@ -219,7 +226,15 @@ export default factories.createCoreController('api::key-seat.key-seat', ({ strap
       // Validate ownership
       const seat = await strapi.documents('api::key-seat.key-seat').findOne({
         documentId,
-        populate: ['license.user']
+        populate: {
+          license:{
+            populate:{
+              user:true
+            }
+          },
+          realtimeTelemetry:true,
+          historicalKpiSummary:true
+        }
       });
 
       if (!seat || !seat.license) {
@@ -244,6 +259,7 @@ export default factories.createCoreController('api::key-seat.key-seat', ({ strap
       const snapshot = await service.createTelemetrySnapshot(
         documentId,
         seat.realtimeTelemetry,
+        seat.historicalKpiSummary || {},
         'realtime' // User-triggered snapshots are marked as 'realtime'
       );
 
@@ -260,6 +276,133 @@ export default factories.createCoreController('api::key-seat.key-seat', ({ strap
     } catch (error) {
       strapi.log.error('[KeySeatController] Error creating snapshot:', error);
       return ctx.internalServerError('Failed to create snapshot');
+    }
+  },
+
+  /**
+   * POST /api/key-seats/test-snapshot
+   * Test endpoint to manually trigger snapshot creation with detailed error logging
+   */
+  async testSnapshot(ctx) {
+    try {
+      strapi.log.info('[KeySeatController] Test snapshot triggered');
+
+      // Get first active seat with telemetry
+      const seats = await strapi.documents('api::key-seat.key-seat').findMany({
+        filters: {
+          isActive: true,
+          realtimeTelemetry: {
+            $not: null
+          }
+        },
+        populate: {
+          realtimeTelemetry: true,
+          historicalKpiSummary: true
+        },
+        limit: 1
+      });
+
+      if (!seats || seats.length === 0) {
+        return ctx.send({
+          success: false,
+          message: 'No active seats with telemetry found'
+        });
+      }
+
+      const seat = seats[0];
+      
+      strapi.log.info('[KeySeatController] Test seat data:', {
+        documentId: seat.documentId,
+        hasRealtimeTelemetry: !!seat.realtimeTelemetry,
+        realtimeTelemetryType: typeof seat.realtimeTelemetry,
+        realtimeTelemetryKeys: seat.realtimeTelemetry ? Object.keys(seat.realtimeTelemetry) : [],
+        hasHistoricalKpi: !!seat.historicalKpiSummary,
+        historicalKpiType: typeof seat.historicalKpiSummary
+      });
+
+      // Try to create snapshot
+      const service = strapi.service('api::key-seat.key-seat');
+      
+      try {
+        const snapshot = await service.createTelemetrySnapshot(
+          seat.documentId,
+          seat.realtimeTelemetry,
+          seat.historicalKpiSummary || {},
+          'daily'
+        );
+
+        return ctx.send({
+          success: true,
+          message: 'Snapshot created successfully',
+          snapshot: {
+            documentId: snapshot.documentId,
+            capturedAt: snapshot.capturedAt
+          }
+        });
+      } catch (snapshotError) {
+        strapi.log.error('[KeySeatController] Snapshot creation failed:', {
+          error: snapshotError.message,
+          stack: snapshotError.stack,
+          name: snapshotError.name,
+          details: snapshotError.details || 'No details',
+          cause: snapshotError.cause || 'No cause'
+        });
+
+        return ctx.send({
+          success: false,
+          error: snapshotError.message,
+          errorName: snapshotError.name,
+          errorDetails: snapshotError.details || null,
+          stack: snapshotError.stack
+        });
+      }
+
+    } catch (error) {
+      strapi.log.error('[KeySeatController] Test snapshot error:', error);
+      return ctx.internalServerError({
+        success: false,
+        error: error.message,
+        stack: error.stack
+      });
+    }
+  },
+
+  /**
+   * GET /api/key-seats/aggregated-kpi
+   * Gets aggregated historical KPI data from all user's seats across all licenses
+   */
+  async getAggregatedKpi(ctx) {
+    try {
+      const user = ctx.state.user;
+
+      if (!user) {
+        return ctx.unauthorized('Authentication required');
+      }
+
+      strapi.log.info('[KeySeatController] Aggregated KPI requested', {
+        userDocumentId: user.documentId
+      });
+
+      // Get aggregated KPI data
+      const service = strapi.service('api::key-seat.key-seat');
+      const aggregatedKpi = await service.getAggregatedKpiForUser(user.documentId);
+
+      if (!aggregatedKpi) {
+        return ctx.send({
+          success: true,
+          data: null,
+          message: 'No historical KPI data available'
+        });
+      }
+
+      return ctx.send({
+        success: true,
+        data: aggregatedKpi
+      });
+
+    } catch (error) {
+      strapi.log.error('[KeySeatController] Error getting aggregated KPI:', error);
+      return ctx.internalServerError('Failed to get aggregated KPI data');
     }
   }
 }));

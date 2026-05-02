@@ -66,12 +66,6 @@
       "inversedBy": "users",
       "configurable": false
     },
-    "licenses": {
-      "type": "relation",
-      "relation": "oneToMany",
-      "target": "api::license.license",
-      "mappedBy": "user"
-    },
     "planType": {
       "type": "enumeration",
       "default": "FreeTrial",
@@ -97,6 +91,12 @@
       "type": "component",
       "component": "user.fcm-token",
       "repeatable": true
+    },
+    "licenses": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::license.license",
+      "mappedBy": "user"
     }
   }
 }

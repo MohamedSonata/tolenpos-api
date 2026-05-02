@@ -1,0 +1,35 @@
+{
+  "collectionName": "components_telemetry_kpi_summaries",
+  "info": {
+    "displayName": "KPI Summary",
+    "description": "Key performance indicators summary"
+  },
+  "options": {},
+  "attributes": {
+    "totalSales": {
+      "type": "decimal",
+      "required": true,
+      "min": 0
+    },
+    "transactionCount": {
+      "type": "integer",
+      "required": true,
+      "min": 0
+    },
+    "averageTransactionValue": {
+      "type": "decimal",
+      "required": true,
+      "min": 0
+    },
+    "period": {
+      "type": "enumeration",
+      "enum": ["today", "week", "month", "year"],
+      "default": "today",
+      "required": true
+    },
+    "lastUpdated": {
+      "type": "datetime",
+      "required": true
+    }
+  }
+}

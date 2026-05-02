@@ -1,3 +1,7 @@
+/**
+ * Custom routes for key-seat
+ */
+
 export default {
   routes: [
     {
@@ -6,8 +10,26 @@ export default {
       handler: 'key-seat.mySeats',
       config: {
         policies: [],
-        middlewares: []
-      }
+        middlewares: [],
+      },
+    },
+    {
+      method: 'GET',
+      path: '/key-seats/aggregated-kpi',
+      handler: 'key-seat.getAggregatedKpi',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
+      method: 'POST',
+      path: '/key-seats/test-snapshot',
+      handler: 'key-seat.testSnapshot',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
     },
     {
       method: 'POST',
@@ -15,8 +37,8 @@ export default {
       handler: 'key-seat.queryTelemetry',
       config: {
         policies: [],
-        middlewares: []
-      }
+        middlewares: [],
+      },
     },
     {
       method: 'GET',
@@ -24,8 +46,8 @@ export default {
       handler: 'key-seat.getLatestTelemetry',
       config: {
         policies: [],
-        middlewares: []
-      }
+        middlewares: [],
+      },
     },
     {
       method: 'POST',
@@ -33,8 +55,8 @@ export default {
       handler: 'key-seat.createSnapshot',
       config: {
         policies: [],
-        middlewares: []
-      }
-    }
-  ]
+        middlewares: [],
+      },
+    },
+  ],
 };

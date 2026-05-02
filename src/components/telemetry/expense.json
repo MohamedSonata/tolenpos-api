@@ -1,0 +1,50 @@
+{
+  "collectionName": "components_telemetry_expenses",
+  "info": {
+    "displayName": "Expense",
+    "description": "Business expense record"
+  },
+  "options": {},
+  "attributes": {
+    "expenseId": {
+      "type": "string",
+      "required": true
+    },
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "amount": {
+      "type": "decimal",
+      "required": true,
+      "min": 0
+    },
+    "category": {
+      "type": "enumeration",
+      "enum": [
+        "KITCHEN_SUPPLIES",
+        "UTILITIES",
+        "RENT",
+        "SALARIES",
+        "MAINTENANCE",
+        "MARKETING",
+        "OTHER"
+      ],
+      "required": true
+    },
+    "paymentMethod": {
+      "type": "enumeration",
+      "enum": ["CASH", "CARD", "BANK_TRANSFER", "DIGITAL_WALLET"],
+      "required": true
+    },
+    "expenseDate": {
+      "type": "datetime",
+      "required": true
+    },
+    "isUrgent": {
+      "type": "boolean",
+      "default": false,
+      "required": true
+    }
+  }
+}

@@ -558,7 +558,10 @@ export interface ApiKeySeatKeySeat extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    historicalKpiSummary: Schema.Attribute.JSON;
+    historicalKpiSummary: Schema.Attribute.Component<
+      'telemetry.historical-kpi-summary',
+      false
+    >;
     isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isConnected: Schema.Attribute.Boolean;
     license: Schema.Attribute.Relation<'manyToOne', 'api::license.license'>;
@@ -570,7 +573,10 @@ export interface ApiKeySeatKeySeat extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     machineUUID: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
-    realtimeTelemetry: Schema.Attribute.JSON;
+    realtimeTelemetry: Schema.Attribute.Component<
+      'telemetry.realtime-telemetry',
+      false
+    >;
     telemetry: Schema.Attribute.JSON;
     telemetryHistory: Schema.Attribute.Relation<
       'oneToMany',
@@ -671,6 +677,10 @@ export interface ApiSeatTelemetryHistorySeatTelemetryHistory
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    historicalKpiSummary: Schema.Attribute.Component<
+      'telemetry.historical-kpi-summary',
+      false
+    >;
     keySeat: Schema.Attribute.Relation<'manyToOne', 'api::key-seat.key-seat'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -684,7 +694,10 @@ export interface ApiSeatTelemetryHistorySeatTelemetryHistory
     > &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'realtime'>;
-    telemetryData: Schema.Attribute.JSON & Schema.Attribute.Required;
+    telemetryData: Schema.Attribute.Component<
+      'telemetry.realtime-telemetry',
+      false
+    >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

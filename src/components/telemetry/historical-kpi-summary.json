@@ -1,0 +1,29 @@
+{
+  "collectionName": "components_telemetry_historical_kpi_summaries",
+  "info": {
+    "displayName": "Historical KPI Summary",
+    "description": "Historical KPI data across multiple time periods"
+  },
+  "options": {},
+  "attributes": {
+    "yesterday": {
+      "type": "component",
+      "repeatable": false,
+      "component": "telemetry.period-kpi"
+    },
+    "thisWeek": {
+      "type": "component",
+      "repeatable": false,
+      "component": "telemetry.period-kpi"
+    },
+    "thisMonth": {
+      "type": "component",
+      "repeatable": false,
+      "component": "telemetry.period-kpi"
+    },
+    "cachedAt": {
+      "type": "datetime",
+      "required": true
+    }
+  }
+}

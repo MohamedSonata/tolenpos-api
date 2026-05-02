@@ -1,0 +1,38 @@
+{
+  "collectionName": "components_telemetry_period_kpis",
+  "info": {
+    "displayName": "Period KPI",
+    "description": "KPI metrics for a specific time period with category breakdown"
+  },
+  "options": {},
+  "attributes": {
+    "totalSales": {
+      "type": "decimal",
+      "required": true,
+      "min": 0
+    },
+    "transactionCount": {
+      "type": "integer",
+      "required": true,
+      "min": 0
+    },
+    "averageTransactionValue": {
+      "type": "decimal",
+      "required": true,
+      "min": 0
+    },
+    "grossProfit": {
+      "type": "decimal",
+      "required": true
+    },
+    "marginPercentage": {
+      "type": "decimal",
+      "required": true
+    },
+    "categories": {
+      "type": "component",
+      "repeatable": true,
+      "component": "telemetry.category-performance"
+    }
+  }
+}

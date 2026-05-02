@@ -95,6 +95,7 @@ export default factories.createCoreController('api::license.license', ({ strapi 
 
         // Create license using Document Service API
         const license = await strapi.documents('api::license.license').create({
+         status:"published", 
           data: {
             expirationType: data.expirationType,
             maxSeats: data.maxSeats,

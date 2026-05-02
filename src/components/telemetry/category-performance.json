@@ -1,0 +1,33 @@
+{
+  "collectionName": "components_telemetry_category_performances",
+  "info": {
+    "displayName": "Category Performance",
+    "description": "Sales performance by product category"
+  },
+  "options": {},
+  "attributes": {
+    "categoryId": {
+      "type": "string",
+      "required": true
+    },
+    "categoryName": {
+      "type": "string",
+      "required": true
+    },
+    "totalRevenue": {
+      "type": "decimal",
+      "required": true,
+      "min": 0
+    },
+    "totalQuantitySold": {
+      "type": "integer",
+      "required": true,
+      "min": 0
+    },
+    "transactionCount": {
+      "type": "integer",
+      "required": true,
+      "min": 0
+    }
+  }
+}

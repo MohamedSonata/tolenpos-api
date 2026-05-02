@@ -17,6 +17,7 @@ export default factories.createCoreService('api::app-release.app-release', ({ st
 
     const updatedRelease = await strapi.documents('api::app-release.app-release').update({
       documentId,
+      status:"published",
       data: {
         downloadCount: (release.downloadCount || 0) + 1
       }

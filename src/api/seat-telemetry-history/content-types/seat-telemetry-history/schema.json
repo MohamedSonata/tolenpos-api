@@ -18,9 +18,10 @@
       "target": "api::key-seat.key-seat",
       "inversedBy": "telemetryHistory"
     },
-    "telemetryData": {
-      "type": "json",
-      "required": true
+      "telemetryData": {
+      "type": "component",
+      "component": "telemetry.realtime-telemetry",
+      "repeatable": false
     },
     "capturedAt": {
       "type": "datetime",
@@ -28,13 +29,18 @@
     },
     "snapshotType": {
       "type": "enumeration",
+      "required": true,
+      "default": "realtime",
       "enum": [
         "realtime",
         "hourly",
         "daily"
-      ],
-      "default": "realtime",
-      "required": true
+      ]
+    },
+    "historicalKpiSummary": {
+      "type": "component",
+      "component": "telemetry.historical-kpi-summary",
+      "repeatable": false
     }
   }
 }

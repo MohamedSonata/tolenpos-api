@@ -84,8 +84,9 @@ export default factories.createCoreService('api::license.license', ({ strapi }) 
         documentId: licenseDocumentId,
         status: 'published',
         populate: {
+          realtimeTelemetry:true,
           seats: {
-            fields: ['documentId', 'machineUUID', 'isActive', 'isConnected', 'timezone', 'telemetry', 'realtimeTelemetry']
+            fields: ['documentId', 'machineUUID', 'isActive', 'isConnected', 'timezone', 'telemetry', ]
           }
         }
       });

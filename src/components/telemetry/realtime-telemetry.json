@@ -1,0 +1,40 @@
+{
+  "collectionName": "components_telemetry_realtime_telemetries",
+  "info": {
+    "displayName": "Realtime Telemetry",
+    "description": "POS realtime telemetry data structure"
+  },
+  "options": {},
+  "attributes": {
+    "networkStatus": {
+      "type": "enumeration",
+      "enum": ["online", "offline"],
+      "default": "offline",
+      "required": true
+    },
+    "lastSyncTime": {
+      "type": "datetime",
+      "required": true
+    },
+    "lastOrder": {
+      "type": "component",
+      "repeatable": false,
+      "component": "telemetry.last-order"
+    },
+    "kpiSummary": {
+      "type": "component",
+      "repeatable": false,
+      "component": "telemetry.kpi-summary",
+      "required": true
+    },
+    "expenses": {
+      "type": "component",
+      "repeatable": true,
+      "component": "telemetry.expense"
+    },
+    "lastUpdated": {
+      "type": "datetime",
+      "required": true
+    }
+  }
+}

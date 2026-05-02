@@ -14,6 +14,7 @@ import type { Core } from '@strapi/strapi';
 import { SocketIOEvents } from '../events_constants';
 import { SeatUpdatePayload, SeatSubscribePayload } from '../interfaces';
 import { multiReplicaSocketManager } from '../socket-manager';
+import { safeLogger, logObject } from '../utils/safe-logger';
 
 /**
  * Sets up seat update event handlers for Socket.IO connections
@@ -85,6 +86,12 @@ function handlePOSSeatUpdate(
         realtimeTelemetryKeys: realtimeTelemetry ? Object.keys(realtimeTelemetry) : [],
         historicalKpiSummaryKeys: historicalKpiSummary ? Object.keys(historicalKpiSummary) : []
       });
+      console.log('[SeatUpdateHandler] Received seat update for',{
+        hasRealtimeTelemetry: !!realtimeTelemetry,
+        hasHistoricalKpiSummary: !!historicalKpiSummary,
+        realtimeTelemetryKeys: realtimeTelemetry ? Object.keys(realtimeTelemetry) : [],
+        historicalKpiSummaryKeys: historicalKpiSummary ? Object.keys(historicalKpiSummary) : []
+      });
 
       // Log incoming payload structure
       strapi.log.info(`[SeatUpdateHandler] Received seat update for ${keySeatDocumentId}`, {
@@ -101,6 +108,8 @@ function handlePOSSeatUpdate(
         realtimeTelemetry,
         historicalKpiSummary
       );
+      
+      logObject(strapi, '[SeatUpdateHandler] Updated Seat Data', updatedSeat);
 
       // Emit success to POS client
       socket.emit(SocketIOEvents.EmitSeatUpdateSuccess, {
@@ -109,7 +118,7 @@ function handlePOSSeatUpdate(
       });
 
       strapi.log.info(`[SeatUpdateHandler] Seat updated successfully: ${keySeatDocumentId}`);
-
+      
       // Notify subscribed mobile apps
       await notifyMobileAppsOfSeatUpdate(io, strapi, updatedSeat, socket.data.userId);
     } catch (error) {
@@ -213,30 +222,28 @@ async function notifyMobileAppsOfSeatUpdate(
 ): Promise<void> {
   try {
     // Extract license documentId (handle both object and string)
-    const licenseDocumentId = typeof updatedSeat.license === 'object' 
-      ? updatedSeat.license.documentId 
-      : updatedSeat.license;
+    
 
-    if (!licenseDocumentId) {
-      strapi.log.warn(`[SeatUpdateHandler] No license found for seat ${updatedSeat.documentId}`);
+    if (!updatedSeat.userDocumentId ) {
+      strapi.log.warn(`[SeatUpdateHandler] No userDocumentId ${updatedSeat.userDocumentId} found for seat ${updatedSeat.documentId}`);
       return;
     }
 
     // Get the license with user populated
-    const license = await strapi.documents('api::license.license').findOne({
-      documentId: licenseDocumentId,
-      populate: ['user']
-    });
+    // const license = await strapi.documents('api::license.license').findOne({
+    //   documentId: licenseDocumentId,
+    //   populate: ['user']
+    // });
 
-    if (!license || !license.user) {
-      strapi.log.warn(`[SeatUpdateHandler] No license/user found for seat ${updatedSeat.documentId}, license ID: ${licenseDocumentId}`);
-      return;
-    }
+    // if (!license || !license.user) {
+    //   strapi.log.warn(`[SeatUpdateHandler] No license/user found for seat ${updatedSeat.documentId}, license ID: ${licenseDocumentId}`);
+    //   return;
+    // }
 
     // Extract owner document ID from license.user relation
-    const ownerDocumentId = typeof license.user === 'object' 
-      ? license.user.documentId 
-      : license.user;
+    // const ownerDocumentId = typeof license.user === 'object' 
+    //   ? license.user.documentId 
+    //   : license.user;
 
     // Prepare notification payload with real-time telemetry
     const notificationPayload = {
@@ -244,11 +251,12 @@ async function notifyMobileAppsOfSeatUpdate(
       realtimeTelemetry: updatedSeat.realtimeTelemetry || updatedSeat.telemetry,
       isActive: updatedSeat.isActive,
       updatedAt: updatedSeat.updatedAt,
-      licenseDocumentId: licenseDocumentId
+     userDocumentId: updatedSeat.userDocumentId
+      // licenseDocumentId: licenseDocumentId
     };
 
     // Emit to user-specific room (works across all replicas and all devices)
-    const roomName = `user:${ownerDocumentId}:seats`;
+    const roomName = `user:${updatedSeat.userDocumentId}:seats`;
     
     // Get count of connected devices in this room
     const socketsInRoom = await io.in(roomName).fetchSockets();
@@ -259,7 +267,7 @@ async function notifyMobileAppsOfSeatUpdate(
 
     strapi.log.info(`[SeatUpdateHandler] Notified ${deviceCount} mobile device(s) in room ${roomName}`, {
       machineUUID: updatedSeat.machineUUID,
-      ownerDocumentId,
+      userDocumentId:updatedSeat.userDocumentId,
       deviceCount,
       hasLastOrder: !!updatedSeat.realtimeTelemetry?.lastOrder,
       hasKpiSummary: !!updatedSeat.realtimeTelemetry?.kpiSummary,

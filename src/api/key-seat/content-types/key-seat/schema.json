@@ -21,9 +21,6 @@
     "telemetry": {
       "type": "json"
     },
-    "realtimeTelemetry": {
-      "type": "json"
-    },
     "isActive": {
       "type": "boolean",
       "default": false
@@ -48,8 +45,15 @@
       "default": "UTC",
       "required": false
     },
+    "realtimeTelemetry": {
+      "type": "component",
+      "component": "telemetry.realtime-telemetry",
+      "repeatable": false
+    },
     "historicalKpiSummary": {
-      "type": "json"
+      "type": "component",
+      "component": "telemetry.historical-kpi-summary",
+      "repeatable": false
     }
   }
 }
