@@ -5,6 +5,7 @@
 import { factories } from '@strapi/strapi';
 import { decryptLicenseKey } from '../utils/encryption';
 import { generateLicenseKey, type LicenseKeyData } from '../utils/encryption';
+import { generateUniquePublicSeatId } from '../../key-seat/utils/public-id-generator';
 
 export default factories.createCoreController('api::license.license', ({ strapi }) => ({
   /**
@@ -362,7 +363,15 @@ export default factories.createCoreController('api::license.license', ({ strapi 
             seat: {
               documentId: keySeat.documentId,
               machineUUID: keySeat.machineUUID,
-              isActive: keySeat.isActive
+              isActive: keySeat.isActive,
+              publicSeatId: keySeat.publicSeatId,
+              businessName: keySeat.businessName,
+              businessType: keySeat.businessType,
+              allowCustomerApp: keySeat.allowCustomerApp,
+              allowMenuBrowsing: keySeat.allowMenuBrowsing,
+              allowBarcodeScanning: keySeat.allowBarcodeScanning,
+              allowCustomerOrdering: keySeat.allowCustomerOrdering,
+              maxCustomerConnections: keySeat.maxCustomerConnections
             }
           }
         });
@@ -376,17 +385,44 @@ export default factories.createCoreController('api::license.license', ({ strapi 
         return ctx.badRequest(`Maximum number of seats (${license.maxSeats}) already activated`);
       }
 
-      // Create new key-seat entry
+      // Get customer app features from user's subscription plan
+      const customerAppFeatures = await strapi.service('api::subscription-plan.subscription-plan')
+        .getCustomerAppFeaturesByUser(userDocumentId);
+
+      // Extract businessType and businessName from request body
+      const { businessType, businessName } = ctx.request.body;
+      
+      // Validate businessType if provided
+      const validBusinessTypes = ['restaurant', 'retail', 'cafe', 'pharmacy', 'other'];
+      const finalBusinessType = businessType && validBusinessTypes.includes(businessType) 
+        ? businessType 
+        : 'retail';
+
+      // Generate unique public seat ID with correct business type
+      const publicSeatId = await generateUniquePublicSeatId(strapi, finalBusinessType);
+
+      // Create new key-seat entry with customer app features
       keySeat = await strapi.documents('api::key-seat.key-seat').create({
         data: {
           machineUUID,
           isActive: true,
-          timezone: validatedTimezone, // Store timezone for this seat
+          timezone: validatedTimezone,
           license: license.documentId,
           telemetry: {
             ...telemetry,
             firstActivated: new Date().toISOString()
-          }
+          },
+          // Customer app fields
+          publicSeatId,
+          businessName: businessName || null,
+          businessType: finalBusinessType,
+          allowCustomerApp: customerAppFeatures?.allowCustomerApp ?? false,
+          allowMenuBrowsing: customerAppFeatures?.allowMenuBrowsing ?? false,
+          allowBarcodeScanning: customerAppFeatures?.allowBarcodeScanning ?? false,
+          allowCustomerOrdering: customerAppFeatures?.allowCustomerOrdering ?? false,
+          maxCustomerConnections: customerAppFeatures?.maxCustomerConnectionsPerSeat ?? 50,
+          currentCustomerConnections: 0,
+          customerFcmTokens: []
         },
         status: 'published'
       });
@@ -430,7 +466,15 @@ export default factories.createCoreController('api::license.license', ({ strapi 
           seat: {
             documentId: keySeat.documentId,
             machineUUID: keySeat.machineUUID,
-            isActive: keySeat.isActive
+            isActive: keySeat.isActive,
+            publicSeatId: keySeat.publicSeatId,
+            businessName: keySeat.businessName,
+            businessType: keySeat.businessType,
+            allowCustomerApp: keySeat.allowCustomerApp,
+            allowMenuBrowsing: keySeat.allowMenuBrowsing,
+            allowBarcodeScanning: keySeat.allowBarcodeScanning,
+            allowCustomerOrdering: keySeat.allowCustomerOrdering,
+            maxCustomerConnections: keySeat.maxCustomerConnections
           }
         }
       });

@@ -103,6 +103,33 @@
         "Professional",
         "Enterprise"
       ]
+    },
+    "allowCustomerApp": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable customer-facing mobile app for this plan"
+    },
+    "allowMenuBrowsing": {
+      "type": "boolean",
+      "default": false,
+      "description": "Allow customers to browse menu/categories (restaurant/cafe)"
+    },
+    "allowBarcodeScanning": {
+      "type": "boolean",
+      "default": false,
+      "description": "Allow customers to scan barcodes for product info (retail/pharmacy)"
+    },
+    "allowCustomerOrdering": {
+      "type": "boolean",
+      "default": false,
+      "description": "Allow customers to place orders directly from mobile app"
+    },
+    "maxCustomerConnectionsPerSeat": {
+      "type": "integer",
+      "default": 50,
+      "min": 1,
+      "max": 500,
+      "description": "Maximum concurrent customer connections per seat"
     }
   }
 }

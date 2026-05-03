@@ -3,6 +3,11 @@
  */
 
 import { factories } from '@strapi/strapi';
+import {
+  sanitizePublicSeatId,
+  sanitizeSeatDataForCustomer,
+  ensureNoSensitiveData
+} from '../utils/customer-validation';
 
 export default factories.createCoreController('api::key-seat.key-seat', ({ strapi }) => ({
   /**
@@ -449,6 +454,167 @@ export default factories.createCoreController('api::key-seat.key-seat', ({ strap
     } catch (error) {
       strapi.log.error('[KeySeatController] Error getting sales insights:', error);
       return ctx.internalServerError('Failed to get sales insights');
+    }
+  },
+
+  /**
+   * GET /api/key-seats/public/:publicSeatId
+   * Gets public seat information (no authentication required)
+   * Used by customer mobile apps to check seat availability before connecting
+   */
+  async getPublicSeatInfo(ctx) {
+    try {
+      const { publicSeatId } = ctx.params;
+
+      if (!publicSeatId) {
+        strapi.log.warn('[KeySeatController] Public seat info request rejected - Missing Public Seat ID', {
+          reason: 'Missing parameter',
+          timestamp: new Date().toISOString()
+        });
+        return ctx.badRequest({
+          success: false,
+          error: 'Public Seat ID is required',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Validate and sanitize Public Seat ID format
+      const sanitizedSeatId = sanitizePublicSeatId(publicSeatId);
+      
+      if (!sanitizedSeatId) {
+        strapi.log.warn('[KeySeatController] Public seat info request rejected - Invalid Public Seat ID format', {
+          publicSeatId,
+          reason: 'Invalid format',
+          timestamp: new Date().toISOString()
+        });
+        return ctx.badRequest({
+          success: false,
+          error: 'Invalid Public Seat ID format',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      strapi.log.info('[KeySeatController] Public seat info requested', {
+        publicSeatId: sanitizedSeatId,
+        timestamp: new Date().toISOString()
+      });
+
+      // Query seat with required filters
+      const seats = await strapi.documents('api::key-seat.key-seat').findMany({
+        filters: {
+          publicSeatId: sanitizedSeatId,
+          isActive: true,
+          allowCustomerApp: true
+        },
+        status: 'published'
+      });
+
+      // Return 404 if seat not found, inactive, or customer app disabled
+      if (!seats || seats.length === 0) {
+        strapi.log.warn('[KeySeatController] Public seat info request rejected - Seat not found or customer app disabled', {
+          publicSeatId: sanitizedSeatId,
+          reason: 'Seat not found or customer app disabled',
+          timestamp: new Date().toISOString()
+        });
+        return ctx.notFound({
+          success: false,
+          error: 'Seat not found or customer app not enabled',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const seat = seats[0] ;
+
+      // Check if POS device is connected
+      const isOnline = !!seat.userSocketId;
+
+      // Calculate if customer can connect
+      const currentConnections = seat.currentCustomerConnections || 0;
+      const maxConnections = seat.maxCustomerConnections || 50;
+      const canConnect = currentConnections < maxConnections;
+
+      // Return offline status if POS device not connected
+      if (!isOnline) {
+        strapi.log.info('[KeySeatController] Public seat info returned - POS device offline', {
+          publicSeatId: sanitizedSeatId,
+          businessName: seat.businessName,
+          businessType: seat.businessType,
+          isOnline: false,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Sanitize response to ensure no sensitive data
+        const sanitizedResponse = {
+          success: false,
+          error: 'POS device is currently offline',
+          seat: {
+            publicSeatId: seat.publicSeatId,
+            businessName: seat.businessName,
+            businessType: seat.businessType,
+            isOnline: false
+          },
+          timestamp: new Date().toISOString()
+        };
+        
+        // Verify no sensitive data in response
+        ensureNoSensitiveData(sanitizedResponse);
+        
+        return ctx.send(sanitizedResponse);
+      }
+
+      // Prepare sanitized seat data for customer
+      const seatData = sanitizeSeatDataForCustomer({
+        publicSeatId: seat.publicSeatId,
+        businessName: seat.businessName,
+        businessType: seat.businessType,
+        isConnected: isOnline,
+        currentCustomerConnections: currentConnections,
+        maxCustomerConnections: maxConnections,
+        allowMenuBrowsing: seat.allowMenuBrowsing,
+        allowBarcodeScanning: seat.allowBarcodeScanning,
+        allowCustomerOrdering: seat.allowCustomerOrdering
+      });
+
+      // Return seat information
+      strapi.log.info('[KeySeatController] Public seat info returned successfully', {
+        publicSeatId: sanitizedSeatId,
+        businessName: seat.businessName,
+        businessType: seat.businessType,
+        isOnline,
+        canConnect,
+        currentConnections,
+        maxConnections,
+        timestamp: new Date().toISOString()
+      });
+
+      const response = {
+        success: true,
+        seat: {
+          ...seatData,
+          canConnect
+        },
+        timestamp: new Date().toISOString()
+      };
+      
+      // Verify no sensitive data in response
+      ensureNoSensitiveData(response);
+
+      return ctx.send(response);
+
+    } catch (error) {
+      strapi.log.error('[KeySeatController] Error getting public seat info', {
+        publicSeatId: ctx.params?.publicSeatId,
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Don't expose internal error details to customers
+      return ctx.internalServerError({
+        success: false,
+        error: 'Failed to get seat information',
+        timestamp: new Date().toISOString()
+      });
     }
   }
 }));

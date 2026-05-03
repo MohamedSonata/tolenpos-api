@@ -343,12 +343,19 @@ async function sendFallbackSnapshot(
  */
 async function cleanupPendingRequests(socket: Socket, strapi: Core.Strapi): Promise<void> {
   try {
+    // Check if redisStateManager is available (may be undefined during shutdown)
+    if (!redisStateManager || typeof redisStateManager.cleanupPendingRequestsForSocket !== 'function') {
+      strapi.log.debug(`[TelemetryQueryHandler] Redis state manager not available, skipping cleanup for socket ${socket.id}`);
+      return;
+    }
+    
     const cleanedCount = await redisStateManager.cleanupPendingRequestsForSocket(socket.id);
     
     if (cleanedCount > 0) {
       strapi.log.info(`[TelemetryQueryHandler] Cleaned up ${cleanedCount} pending requests for socket ${socket.id}`);
     }
   } catch (error) {
-    strapi.log.error(`[TelemetryQueryHandler] Error cleaning up pending requests:`, error);
+    // Don't throw errors during cleanup - just log them
+    strapi.log.debug(`[TelemetryQueryHandler] Error cleaning up pending requests (may be shutting down):`, error.message);
   }
 }

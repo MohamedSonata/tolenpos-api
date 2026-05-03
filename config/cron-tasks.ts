@@ -29,6 +29,7 @@
 import type { Core } from '@strapi/strapi';
 import { executeDailySnapshotJob } from "../src/cron/jobs/daily-telemetry-snapshot";
 import { executeCleanupJob } from "../src/cron/jobs/cleanup-old-snapshots";
+import { executeCustomerFcmTokenCleanup } from "../src/cron/jobs/cleanup-customer-fcm-tokens";
 
 // Log when this module is loaded
 console.log('[CronTasks] Cron tasks configuration module loaded');
@@ -94,6 +95,34 @@ export default {
       // Run at 3 AM every Sunday (configurable via env var)
       rule: process.env.TELEMETRY_CLEANUP_SCHEDULE || "0 3 * * 0",
       tz: process.env.TZ || "UTC",
+    },
+  },
+
+  /**
+   * Customer FCM Token Cleanup Job
+   * Removes inactive customer FCM tokens older than 30 days
+   * Runs daily at 2:00 AM UTC
+   * 
+   * DISTRIBUTED LOCKING: Uses Redis lock to ensure only ONE replica executes this job
+   * Lock TTL: 5 minutes (job should complete quickly)
+   */
+  cleanupCustomerFcmTokens: {
+    task: ({ strapi }: { strapi: Core.Strapi }) => {
+      const hostname = process.env.HOSTNAME || 'unknown';
+      strapi.log.info(`[CronTasks] Starting customer FCM token cleanup job on ${hostname}`);
+      
+      executeCustomerFcmTokenCleanup(strapi)
+        .then(() => {
+          strapi.log.info(`[CronTasks] Customer FCM token cleanup job completed successfully on ${hostname}`);
+        })
+        .catch((error) => {
+          strapi.log.error(`[CronTasks] Customer FCM token cleanup job failed on ${hostname}:`, error);
+        });
+    },
+    options: {
+      // Run daily at 2:00 AM UTC
+      rule: "0 2 * * *",
+      tz: "UTC",
     },
   },
 

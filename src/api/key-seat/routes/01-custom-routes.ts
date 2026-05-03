@@ -67,5 +67,15 @@ export default {
         middlewares: [],
       },
     },
+    {
+      method: 'GET',
+      path: '/key-seats/public/:publicSeatId',
+      handler: 'key-seat.getPublicSeatInfo',
+      config: {
+        auth: false,
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 };

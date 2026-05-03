@@ -555,9 +555,25 @@ export interface ApiKeySeatKeySeat extends Struct.CollectionTypeSchema {
     draftAndPublish: true;
   };
   attributes: {
+    allowBarcodeScanning: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    allowCustomerApp: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    allowCustomerOrdering: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    allowMenuBrowsing: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    businessName: Schema.Attribute.String;
+    businessType: Schema.Attribute.Enumeration<
+      ['restaurant', 'retail', 'cafe', 'pharmacy', 'other']
+    > &
+      Schema.Attribute.DefaultTo<'retail'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    currentCustomerConnections: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<0>;
+    customerFcmTokens: Schema.Attribute.Component<'user.fcm-token', true>;
     historicalKpiSummary: Schema.Attribute.Component<
       'telemetry.historical-kpi-summary',
       false
@@ -572,6 +588,9 @@ export interface ApiKeySeatKeySeat extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     machineUUID: Schema.Attribute.String;
+    maxCustomerConnections: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<50>;
+    publicSeatId: Schema.Attribute.String & Schema.Attribute.Unique;
     publishedAt: Schema.Attribute.DateTime;
     realtimeTelemetry: Schema.Attribute.Component<
       'telemetry.realtime-telemetry',
@@ -716,6 +735,14 @@ export interface ApiSubscriptionPlanSubscriptionPlan
     draftAndPublish: true;
   };
   attributes: {
+    allowBarcodeScanning: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    allowCustomerApp: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    allowCustomerOrdering: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    allowMenuBrowsing: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
     billingPeriod: Schema.Attribute.Enumeration<
       ['monthly', 'yearly', 'lifetime']
     > &
@@ -747,6 +774,15 @@ export interface ApiSubscriptionPlanSubscriptionPlan
       'api::subscription-plan.subscription-plan'
     > &
       Schema.Attribute.Private;
+    maxCustomerConnectionsPerSeat: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 500;
+          min: 1;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<50>;
     maxProducts: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<100>;
     maxRegisters: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<1>;
     name: Schema.Attribute.String &

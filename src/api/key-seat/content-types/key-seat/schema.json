@@ -54,6 +54,49 @@
       "type": "component",
       "component": "telemetry.historical-kpi-summary",
       "repeatable": false
+    },
+    "publicSeatId": {
+      "type": "string",
+      "unique": true,
+      "required": false
+    },
+    "businessName": {
+      "type": "string",
+      "required": false
+    },
+    "businessType": {
+      "type": "enumeration",
+      "enum": ["restaurant", "retail", "cafe", "pharmacy", "other"],
+      "default": "retail"
+    },
+    "allowCustomerApp": {
+      "type": "boolean",
+      "default": false
+    },
+    "allowMenuBrowsing": {
+      "type": "boolean",
+      "default": false
+    },
+    "allowBarcodeScanning": {
+      "type": "boolean",
+      "default": false
+    },
+    "allowCustomerOrdering": {
+      "type": "boolean",
+      "default": false
+    },
+    "maxCustomerConnections": {
+      "type": "integer",
+      "default": 50
+    },
+    "currentCustomerConnections": {
+      "type": "integer",
+      "default": 0
+    },
+    "customerFcmTokens": {
+      "type": "component",
+      "component": "user.fcm-token",
+      "repeatable": true
     }
   }
 }

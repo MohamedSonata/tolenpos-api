@@ -10,6 +10,8 @@ import type { Core } from '@strapi/strapi';
 import authenticateUserConnection from '../socketio/services';
 import { setupSeatUpdateHandlers } from './handlers/seat-update.handler';
 import { setupTelemetryQueryHandlers } from './handlers/telemetry-query.handler';
+import { setupCustomerAppHandlers } from './handlers/customer-app.handler';
+import { setupPOSCustomerResponseHandlers } from './handlers/pos-customer-response.handler';
 import { initializeSocketManager, multiReplicaSocketManager } from './socket-manager';
 
 // Constants
@@ -32,7 +34,22 @@ export function setupConnectionHandlers(
   io.on('connection', async (socket: Socket) => {
     strapi.log.info(`[ConnectionHandler] New connection: ${socket.id}`);
 
-    // Authenticate the connection (Requirement 6.1)
+    // Check if this is a customer connection (no auth required)
+    const query = socket.handshake.query as any;
+    const clientType = query.clientType as string;
+
+    if (clientType === 'customer') {
+      // Customer connections don't require authentication
+      strapi.log.info(`[ConnectionHandler] Customer connection detected: ${socket.id}`);
+      
+      // Set up customer app handlers
+      setupCustomerAppHandlers(socket, strapi, io);
+      
+      // Handle disconnection (customer handler has its own disconnect logic)
+      return;
+    }
+
+    // Authenticate the connection for POS and mobile clients (Requirement 6.1)
     const authenticated = await authenticateUserConnection({ strapi }).authenticateUserConnection(socket);
 
     if (!authenticated) {
@@ -42,11 +59,11 @@ export function setupConnectionHandlers(
 
     // Get user info and client type from socket
     const userId = (socket as any).userID;
-    const clientType = (socket as any).clientType;
+    const authenticatedClientType = (socket as any).clientType;
     const machineUUID = (socket as any).machineUUID;
     const keySeatDocumentId = (socket as any).keySeatDocumentId;
     
-    strapi.log.warn(`[ConnectionHandler] New connection User ID: ${userId}, Client Type: ${clientType}`);
+    strapi.log.warn(`[ConnectionHandler] New connection User ID: ${userId}, Client Type: ${authenticatedClientType}`);
     
     if (userId) {
       // Determine user role and document ID
@@ -57,19 +74,22 @@ export function setupConnectionHandlers(
         socket.data = {
           userId,
           documentId: userInfo.documentId,
-          clientType,
+          clientType: authenticatedClientType,
           machineUUID,
           keySeatDocumentId,
         };
         strapi.log.warn(`[ConnectionHandler] New connection User info: ${JSON.stringify(socket.data)}`);
 
         // Map user to socket based on client type
-        if (clientType === 'pos' && keySeatDocumentId) {
+        if (authenticatedClientType === 'pos' && keySeatDocumentId) {
           // Update key-seat socket ID for POS clients
           await updateKeySeatSocketId(socket, keySeatDocumentId, strapi);
           
           // Send current plan to POS on connection (use documentId, not userId)
           await sendCurrentPlanToPOS(socket, userInfo.documentId, strapi);
+          
+          // Set up POS customer response handlers for POS clients
+          setupPOSCustomerResponseHandlers(socket, strapi, io);
         } else {
           // Update user socket ID for mobile clients
           await mapUserToSocket(socket, userInfo);
@@ -244,6 +264,8 @@ async function handleDisconnection(
 
 /**
  * Clears the socket ID from key-seat table for POS clients
+ * Also resets customer connections to 0 since POS is offline
+ * Handles database errors gracefully during shutdown
  */
 async function clearKeySeatSocketId(
   keySeatDocumentId: string,
@@ -257,20 +279,37 @@ async function clearKeySeatSocketId(
     });
 
     if (keySeat && keySeat.userSocketId === socketId) {
+      const previousCustomerConnections = keySeat.currentCustomerConnections || 0;
+      
       await strapi.documents('api::key-seat.key-seat').update({
         documentId: keySeatDocumentId,
         status: 'published',
         data: {
           userSocketId: null,
           isConnected: false, // Mark as disconnected
+          currentCustomerConnections: 0, // Reset customer connections since POS is offline
         },
       });
-      strapi.log.info(`[ConnectionHandler] Cleared key-seat socket ID for key-seat ${keySeatDocumentId}`);
+      
+      strapi.log.info(`[ConnectionHandler] Cleared key-seat socket ID for key-seat ${keySeatDocumentId}`, {
+        previousCustomerConnections,
+        resetTo: 0
+      });
+      
+      if (previousCustomerConnections > 0) {
+        strapi.log.warn(`[ConnectionHandler] Reset ${previousCustomerConnections} customer connection(s) due to POS disconnect`);
+      }
     } else {
       strapi.log.warn(`[ConnectionHandler] Socket ID mismatch or already cleared for key-seat ${keySeatDocumentId}`);
     }
   } catch (error) {
-    strapi.log.error(`[ConnectionHandler] Error clearing key-seat socket ID: ${error}`);
+    // During shutdown, database queries may fail - handle gracefully
+    const errorMessage = error?.message || String(error);
+    if (errorMessage.includes('Timeout') || errorMessage.includes('pool') || errorMessage.includes('aborted')) {
+      strapi.log.debug(`[ConnectionHandler] Database unavailable during disconnect cleanup (likely shutting down)`);
+    } else {
+      strapi.log.error(`[ConnectionHandler] Error clearing key-seat socket ID:`, errorMessage);
+    }
   }
 }
 
@@ -279,6 +318,7 @@ async function clearKeySeatSocketId(
  * NOTE: We don't set socketConnectionStatus to false immediately because
  * the user might have other devices still connected. The status is managed
  * by checking if any sockets exist in the user's room.
+ * Handles database errors gracefully during shutdown
  */
 async function clearUserSocketId(
   userDocumentId: string,
@@ -304,7 +344,13 @@ async function clearUserSocketId(
       strapi.log.info(`[ConnectionHandler] User ${userDocumentId} still has ${socketsInRoom.length} device(s) connected`);
     }
   } catch (error) {
-    strapi.log.error(`[ConnectionHandler] Error updating user connection status: ${error}`);
+    // During shutdown, database queries may fail - handle gracefully
+    const errorMessage = error?.message || String(error);
+    if (errorMessage.includes('Timeout') || errorMessage.includes('pool') || errorMessage.includes('aborted')) {
+      strapi.log.debug(`[ConnectionHandler] Database unavailable during user disconnect cleanup (likely shutting down)`);
+    } else {
+      strapi.log.error(`[ConnectionHandler] Error updating user connection status:`, errorMessage);
+    }
   }
 }
 

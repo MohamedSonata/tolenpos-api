@@ -187,6 +187,7 @@ export class MultiReplicaSocketManager {
 
   /**
    * Get license document ID for a key-seat
+   * Handles errors gracefully during shutdown
    */
   private async getLicenseForKeySeat(keySeatDocumentId: string): Promise<string | null> {
     try {
@@ -197,7 +198,13 @@ export class MultiReplicaSocketManager {
 
       return keySeat?.license?.documentId || null;
     } catch (error) {
-      this.strapi.log.error(`[SocketManager] Error getting license for key-seat ${keySeatDocumentId}:`, error);
+      // During shutdown, database queries may be aborted - this is expected
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('aborted') || errorMessage.includes('Timeout') || errorMessage.includes('pool')) {
+        this.strapi.log.debug(`[SocketManager] Database unavailable for key-seat ${keySeatDocumentId} (likely shutting down)`);
+      } else {
+        this.strapi.log.error(`[SocketManager] Error getting license for key-seat ${keySeatDocumentId}:`, errorMessage);
+      }
       return null;
     }
   }

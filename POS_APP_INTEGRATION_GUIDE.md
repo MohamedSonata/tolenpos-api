@@ -299,20 +299,123 @@ let connectedCustomers = 0;
 
 // Listen for customer connection updates from server
 socket.on('seat:customer:connected', (data) => {
-  connectedCustomers = data.currentConnections;
-  updateCustomerCountUI(connectedCustomers);
-  console.log('[POS] Customers connected:', connectedCustomers);
+  const { publicSeatId, currentConnections, maxConnections, timestamp } = data;
+  
+  connectedCustomers = currentConnections;
+  updateCustomerCountUI(connectedCustomers, maxConnections);
+  
+  console.log('[POS] Customer connected:', {
+    publicSeatId,
+    currentConnections,
+    maxConnections,
+    timestamp
+  });
+  
+  // Optional: Show notification
+  showNotification(`Customer connected (${currentConnections}/${maxConnections})`, 'info');
 });
 
 socket.on('seat:customer:disconnected', (data) => {
-  connectedCustomers = data.currentConnections;
+  const { publicSeatId, currentConnections, connectionDurationSeconds, timestamp } = data;
+  
+  connectedCustomers = currentConnections;
   updateCustomerCountUI(connectedCustomers);
-  console.log('[POS] Customers connected:', connectedCustomers);
+  
+  console.log('[POS] Customer disconnected:', {
+    publicSeatId,
+    currentConnections,
+    connectionDurationSeconds,
+    timestamp
+  });
+  
+  // Optional: Show notification
+  showNotification(`Customer disconnected (${currentConnections} remaining)`, 'info');
 });
 
-function updateCustomerCountUI(count: number) {
-  document.getElementById('customer-count').textContent = count.toString();
+function updateCustomerCountUI(count: number, max?: number) {
+  const countElement = document.getElementById('customer-count');
+  countElement.textContent = max ? `${count}/${max}` : count.toString();
+  
+  // Optional: Add visual indicator
+  if (count > 0) {
+    countElement.classList.add('has-customers');
+  } else {
+    countElement.classList.remove('has-customers');
+  }
 }
+```
+
+### Event Payloads
+
+#### `seat:customer:connected`
+```typescript
+{
+  publicSeatId: string;        // e.g., "REST42A"
+  currentConnections: number;  // Current number of connected customers
+  maxConnections: number;      // Maximum allowed connections
+  timestamp: string;           // ISO 8601 timestamp
+}
+```
+
+#### `seat:customer:disconnected`
+```typescript
+{
+  publicSeatId: string;              // e.g., "REST42A"
+  currentConnections: number;        // Remaining connected customers
+  connectionDurationSeconds: number; // How long the customer was connected
+  timestamp: string;                 // ISO 8601 timestamp
+}
+```
+
+### UI Example with Connection Status
+
+```html
+<!-- Customer Connection Section -->
+<div class="customer-connection-panel">
+  <h3>Customer App Connection</h3>
+  
+  <div class="qr-code-container">
+    <img id="customer-qr" alt="Scan to connect" />
+  </div>
+  
+  <div class="seat-id-display">
+    <label>Seat ID:</label>
+    <span id="seat-id-text" class="seat-id">REST42A</span>
+  </div>
+  
+  <div class="connection-status">
+    <span id="customer-count" class="count">0</span> customers connected
+    <span class="status-indicator" id="status-indicator"></span>
+  </div>
+  
+  <button onclick="printQRCode()">Print QR Code</button>
+</div>
+
+<style>
+.count.has-customers {
+  color: #28a745;
+  font-weight: bold;
+}
+
+.status-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #dc3545;
+  margin-left: 8px;
+}
+
+.count.has-customers + .status-indicator {
+  background-color: #28a745;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+</style>
 ```
 
 ---

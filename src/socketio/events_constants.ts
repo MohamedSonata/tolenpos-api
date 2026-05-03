@@ -231,4 +231,111 @@ export class SocketIOEvents {
    * Event emitted to mobile app when telemetry query fails or times out
    */
   static readonly EmitTelemetryQueryError = "seat:telemetry:query:error";
+
+  // Customer App Events Section
+
+  /**
+   * Event emitted by customer app to connect to a specific POS seat
+   */
+  static readonly OnCustomerConnect = "customer:connect";
+
+  /**
+   * Event emitted to customer app confirming successful connection
+   */
+  static readonly EmitCustomerConnectSuccess = "customer:connect:success";
+
+  /**
+   * Event emitted when customer disconnects from seat
+   */
+  static readonly OnCustomerDisconnect = "customer:disconnect";
+
+  /**
+   * Event emitted to POS device when a customer connects to their seat
+   */
+  static readonly EmitPOSCustomerConnected = "seat:customer:connected";
+
+  /**
+   * Event emitted to POS device when a customer disconnects from their seat
+   */
+  static readonly EmitPOSCustomerDisconnected = "seat:customer:disconnected";
+
+  // Menu Browsing Events (Restaurant/Cafe)
+
+  /**
+   * Event emitted by customer app to request menu categories
+   */
+  static readonly OnCustomerMenuCategories = "customer:menu:categories";
+
+  /**
+   * Event emitted to customer app with menu categories data
+   */
+  static readonly EmitCustomerMenuCategories = "customer:menu:categories:data";
+
+  /**
+   * Event emitted by customer app to request menu products for a category
+   */
+  static readonly OnCustomerMenuProducts = "customer:menu:products";
+
+  /**
+   * Event emitted to customer app with menu products data
+   */
+  static readonly EmitCustomerMenuProducts = "customer:menu:products:data";
+
+  // Barcode Scanning Events (Retail/Pharmacy)
+
+  /**
+   * Event emitted by customer app to scan a product barcode
+   */
+  static readonly OnCustomerProductScan = "customer:product:scan";
+
+  /**
+   * Event emitted to customer app with scanned product data
+   */
+  static readonly EmitCustomerProductData = "customer:product:data";
+
+  // POS Request Events (Backend to POS)
+
+  /**
+   * Event emitted to POS device to request menu categories
+   */
+  static readonly EmitPOSMenuCategoriesRequest = "pos:menu:categories:request";
+
+  /**
+   * Event emitted to POS device to request menu products
+   */
+  static readonly EmitPOSMenuProductsRequest = "pos:menu:products:request";
+
+  /**
+   * Event emitted to POS device to request product scan
+   */
+  static readonly EmitPOSProductScanRequest = "pos:product:scan:request";
+
+  // POS Response Events (POS to Backend)
+
+  /**
+   * Event emitted by POS device with menu categories response
+   */
+  static readonly OnPOSMenuCategoriesResponse = "pos:menu:categories:response";
+
+  /**
+   * Event emitted by POS device with menu products response
+   */
+  static readonly OnPOSMenuProductsResponse = "pos:menu:products:response";
+
+  /**
+   * Event emitted by POS device with product scan response
+   */
+  static readonly OnPOSProductScanResponse = "pos:product:scan:response";
+
+  // Customer Error Events
+
+  /**
+   * Event emitted to customer app when an error occurs
+   */
+  static readonly EmitCustomerError = "customer:error";
+
+  /**
+   * Event emitted to customer app when a request times out
+   */
+  static readonly EmitCustomerTimeout = "customer:timeout";
 }
