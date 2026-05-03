@@ -84,9 +84,23 @@ export default factories.createCoreService('api::license.license', ({ strapi }) 
         documentId: licenseDocumentId,
         status: 'published',
         populate: {
-          realtimeTelemetry:true,
+          // realtimeTelemetry:true,
+
           seats: {
-            fields: ['documentId', 'machineUUID', 'isActive', 'isConnected', 'timezone', 'telemetry', ]
+            populate: {
+              realtimeTelemetry: {
+                populate: {
+                  lastOrder: {
+                    populate: {
+                      items: true
+                    }
+                  },
+                  kpiSummary: true,
+                  expenses: true
+                }
+              }
+            },
+            fields: ['documentId', 'machineUUID', 'isActive', 'isConnected', 'timezone', 'telemetry',]
           }
         }
       });
@@ -171,10 +185,11 @@ export default factories.createCoreService('api::license.license', ({ strapi }) 
 
       return insights;
     } catch (error) {
-      strapi.log.error('[LicenseService] Error generating seats insights:', {
-        licenseDocumentId,
-        error: error.message
-      });
+      console.log("[LicenseService] Error generating seats insights:",licenseDocumentId,error.message)
+      strapi.log.error(`[LicenseService] Error generating seats insights:${
+      {  licenseDocumentId,
+        error: error.message}
+      }`);
       throw error;
     }
   }

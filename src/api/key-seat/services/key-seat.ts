@@ -440,7 +440,7 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
                   categories: true
                 }
               },
-              thisWeek: {
+                  thisWeek: {
                 populate: {
                   categories: true
                 }
@@ -483,7 +483,7 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
             grossProfit: historicalKpi.yesterday.grossProfit || 0,
             marginPercentage: historicalKpi.yesterday.marginPercentage || 0,
           } : null,
-          lastSevenDaysKPISummary: historicalKpi?.thisWeek ? {
+             lastSevenDaysKPISummary: historicalKpi?.thisWeek ? {
             totalSales: historicalKpi.thisWeek.totalSales || 0,
             transactionCount: historicalKpi.thisWeek.transactionCount || 0,
             averageTransactionValue: historicalKpi.thisWeek.averageTransactionValue || 0,
@@ -668,21 +668,16 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
           },
           historicalKpiSummary: {
             populate: {
-              yesterday: {
+
+           
+                yesterday: {
                 populate: {
                   categories: true
                 }
               },
-              thisWeek: {
-                populate: {
-                  categories: true
-                }
-              },
-              thisMonth: {
-                populate: {
-                  categories: true
-                }
-              }
+            
+           
+           
             }
           }
         },
@@ -761,7 +756,7 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
                 const historicalKpi = seat.historicalKpiSummary && 
                   typeof seat.historicalKpiSummary === 'object' && 
                   !Array.isArray(seat.historicalKpiSummary)
-                  ? seat.historicalKpiSummary as Record<string, any>
+                  ? seat.historicalKpiSummary.yesterday as Record<string, any>
                   : {};
 
                 strapi.log.info(`[KeySeatService] Preparing snapshot data for seat ${seat.documentId}:`, {
@@ -1087,5 +1082,656 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
       });
       throw error;
     }
+  },
+
+  /**
+   * Gets sales insights for a specific date across all user's seats
+   * Routes to realtime data (today) or historical data (past dates)
+   * @param userDocumentId - Document ID of the user
+   * @param targetDate - ISO date string (YYYY-MM-DD) or Date object
+   * @returns Aggregated sales insights for the target date
+   */
+  async getSalesInsights(userDocumentId: string, targetDate: string | Date) {
+    try {
+      // Parse target date
+      const requestedDate = typeof targetDate === 'string' ? new Date(targetDate) : targetDate;
+      
+      if (isNaN(requestedDate.getTime())) {
+        throw new Error('Invalid date format');
+      }
+
+      // Get today's date (start of day in UTC)
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      
+      // Get yesterday's date
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      // Get requested date (start of day in UTC)
+      const targetDateStart = new Date(requestedDate);
+      targetDateStart.setUTCHours(0, 0, 0, 0);
+
+      // Determine which data source to use
+      const isToday = targetDateStart.getTime() === today.getTime();
+      const isYesterday = targetDateStart.getTime() === yesterday.getTime();
+
+      strapi.log.info('[KeySeatService] Getting sales insights:', {
+        userDocumentId,
+        requestedDate: requestedDate.toISOString(),
+        targetDateStart: targetDateStart.toISOString(),
+        today: today.toISOString(),
+        yesterday: yesterday.toISOString(),
+        isToday,
+        isYesterday
+      });
+
+      if (isToday) {
+        // Fetch from key-seat.realtimeTelemetry (today's live data)
+        return await this.getTodaySalesInsights(userDocumentId);
+      } else if (isYesterday) {
+        // Fetch from key-seat.historicalKpiSummary.yesterday (cached yesterday data)
+        return await this.getYesterdaySalesInsights(userDocumentId);
+      } else {
+        // Fetch from seat-telemetry-history.historicalKpiSummary (older historical data)
+        return await this.getHistoricalSalesInsights(userDocumentId, targetDateStart);
+      }
+    } catch (error) {
+      strapi.log.error('[KeySeatService] Error getting sales insights:', {
+        userDocumentId,
+        targetDate,
+        error: error.message
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Gets today's sales insights from realtime telemetry
+   * @param userDocumentId - Document ID of the user
+   * @returns Aggregated sales insights from realtime data
+   */
+  async getTodaySalesInsights(userDocumentId: string) {
+    try {
+      // Find all licenses for the user
+      const licenses = await strapi.documents('api::license.license').findMany({
+        filters: {
+          user: {
+            documentId: userDocumentId
+          }
+        },
+        status: 'published'
+      });
+
+      if (!licenses || licenses.length === 0) {
+        return {
+          date: new Date().toISOString().split('T')[0],
+          isToday: true,
+          dataSource: 'realtime',
+          insights: null,
+          seatsCount: 0,
+          message: 'No licenses found for user'
+        };
+      }
+
+      // Get license document IDs
+      const licenseDocumentIds = licenses.map(license => license.documentId);
+
+      // Find all active seats with realtime telemetry
+      const seats = await strapi.documents('api::key-seat.key-seat').findMany({
+        filters: {
+          license: {
+            documentId: {
+              $in: licenseDocumentIds
+            }
+          },
+          isActive: true,
+          realtimeTelemetry: {
+            $not: null
+          }
+        },
+        status: 'published',
+        populate: {
+          realtimeTelemetry: {
+            populate: {
+              kpiSummary: true,
+              lastOrder: {
+                populate: {
+                  items: true
+                }
+              },
+              expenses: true
+            }
+          }
+        }
+      });
+
+      if (!seats || seats.length === 0) {
+        return {
+          date: new Date().toISOString().split('T')[0],
+          isToday: true,
+          dataSource: 'realtime',
+          insights: null,
+          seatsCount: 0,
+          message: 'No active seats with telemetry data'
+        };
+      }
+
+      // Aggregate KPI data from realtimeTelemetry
+      let totalSales = 0;
+      let transactionCount = 0;
+      let grossProfit = 0;
+      let totalExpenses = 0;
+      let hasData = false;
+
+      const lastOrders: any[] = [];
+      const allExpenses: any[] = [];
+
+      for (const seat of seats) {
+        const telemetry = seat.realtimeTelemetry as any;
+
+        if (!telemetry || typeof telemetry !== 'object') {
+          continue;
+        }
+
+        // Aggregate KPI summary
+        if (telemetry.kpiSummary) {
+          hasData = true;
+          totalSales += telemetry.kpiSummary.totalSales || 0;
+          transactionCount += telemetry.kpiSummary.transactionCount || 0;
+          // Note: realtimeTelemetry.kpiSummary doesn't have grossProfit
+        }
+
+        // Collect last orders
+        if (telemetry.lastOrder) {
+          lastOrders.push({
+            ...telemetry.lastOrder,
+            seatId: seat.documentId,
+            machineUUID: seat.machineUUID
+          });
+        }
+
+        // Collect and sum expenses
+        if (Array.isArray(telemetry.expenses)) {
+          for (const expense of telemetry.expenses) {
+            totalExpenses += expense.amount || 0;
+            allExpenses.push({
+              ...expense,
+              seatId: seat.documentId,
+              machineUUID: seat.machineUUID
+            });
+          }
+        }
+      }
+
+      if (!hasData) {
+        return {
+          date: new Date().toISOString().split('T')[0],
+          isToday: true,
+          dataSource: 'realtime',
+          insights: null,
+          seatsCount: seats.length,
+          message: 'No KPI data available in realtime telemetry'
+        };
+      }
+
+      // Calculate derived metrics
+      const averageTransactionValue = transactionCount > 0 ? totalSales / transactionCount : 0;
+      const netProfit = totalSales - totalExpenses;
+      const profitMargin = totalSales > 0 ? (netProfit / totalSales) * 100 : 0;
+
+      // Sort last orders by creation time (most recent first)
+      lastOrders.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+      // Sort expenses by date (most recent first)
+      allExpenses.sort((a, b) => {
+        const dateA = new Date(a.expenseDate || 0).getTime();
+        const dateB = new Date(b.expenseDate || 0).getTime();
+        return dateB - dateA;
+      });
+
+      return {
+        date: new Date().toISOString().split('T')[0],
+        isToday: true,
+        dataSource: 'realtime',
+        seatsCount: seats.length,
+        insights: {
+          totalSales,
+          transactionCount,
+          averageTransactionValue,
+          grossProfit: 0, // Not available in realtime KPI
+          marginPercentage: 0, // Not available in realtime KPI
+          totalExpenses,
+          netProfit,
+          profitMargin,
+          lastOrders: lastOrders.slice(0, 10),
+          expenses: allExpenses,
+          expensesByCategory: this.groupExpensesByCategory(allExpenses),
+          categories: [] // Not available in realtime telemetry
+        }
+      };
+    } catch (error) {
+      strapi.log.error('[KeySeatService] Error getting today sales insights:', {
+        userDocumentId,
+        error: error.message
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Gets yesterday's sales insights from historicalKpiSummary.yesterday
+   * @param userDocumentId - Document ID of the user
+   * @returns Aggregated sales insights from yesterday's cached data
+   */
+  async getYesterdaySalesInsights(userDocumentId: string) {
+    try {
+      // Find all licenses for the user
+      const licenses = await strapi.documents('api::license.license').findMany({
+        filters: {
+          user: {
+            documentId: userDocumentId
+          }
+        },
+        status: 'published'
+      });
+
+      if (!licenses || licenses.length === 0) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        return {
+          date: yesterday.toISOString().split('T')[0],
+          isToday: false,
+          dataSource: 'cached-yesterday',
+          insights: null,
+          seatsCount: 0,
+          message: 'No licenses found for user'
+        };
+      }
+
+      // Get license document IDs
+      const licenseDocumentIds = licenses.map(license => license.documentId);
+
+      // Find all active seats with historicalKpiSummary
+      const seats = await strapi.documents('api::key-seat.key-seat').findMany({
+        filters: {
+          license: {
+            documentId: {
+              $in: licenseDocumentIds
+            }
+          },
+          isActive: true,
+          historicalKpiSummary: {
+            $not: null
+          }
+        },
+        status: 'published',
+        populate: {
+          historicalKpiSummary: {
+            populate: {
+              yesterday: {
+                populate: {
+                  categories: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!seats || seats.length === 0) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        return {
+          date: yesterday.toISOString().split('T')[0],
+          isToday: false,
+          dataSource: 'cached-yesterday',
+          insights: null,
+          seatsCount: 0,
+          message: 'No active seats with historical KPI data'
+        };
+      }
+
+      // Aggregate data from historicalKpiSummary.yesterday
+      let totalSales = 0;
+      let transactionCount = 0;
+      let grossProfit = 0;
+      let hasData = false;
+
+      const categoryMap = new Map<string, {
+        categoryId: string;
+        categoryName: string;
+        totalRevenue: number;
+        totalQuantitySold: number;
+        transactionCount: number;
+      }>();
+
+      for (const seat of seats) {
+        const historicalKpi = seat.historicalKpiSummary as any;
+
+        if (!historicalKpi || typeof historicalKpi !== 'object' || !historicalKpi.yesterday) {
+          continue;
+        }
+
+        const yesterday = historicalKpi.yesterday;
+
+        hasData = true;
+        totalSales += yesterday.totalSales || 0;
+        transactionCount += yesterday.transactionCount || 0;
+        grossProfit += yesterday.grossProfit || 0;
+
+        // Aggregate categories
+        if (Array.isArray(yesterday.categories)) {
+          for (const category of yesterday.categories) {
+            const categoryId = category.categoryId || 'unknown';
+            
+            if (categoryMap.has(categoryId)) {
+              const existing = categoryMap.get(categoryId)!;
+              existing.totalRevenue += category.totalRevenue || 0;
+              existing.totalQuantitySold += category.totalQuantitySold || 0;
+              existing.transactionCount += category.transactionCount || 0;
+            } else {
+              categoryMap.set(categoryId, {
+                categoryId,
+                categoryName: category.categoryName || 'Unknown',
+                totalRevenue: category.totalRevenue || 0,
+                totalQuantitySold: category.totalQuantitySold || 0,
+                transactionCount: category.transactionCount || 0
+              });
+            }
+          }
+        }
+      }
+
+      if (!hasData) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        return {
+          date: yesterday.toISOString().split('T')[0],
+          isToday: false,
+          dataSource: 'cached-yesterday',
+          insights: null,
+          seatsCount: seats.length,
+          message: 'No yesterday KPI data available'
+        };
+      }
+
+      // Calculate derived metrics
+      const averageTransactionValue = transactionCount > 0 ? totalSales / transactionCount : 0;
+      const marginPercentage = totalSales > 0 ? (grossProfit / totalSales) * 100 : 0;
+
+      // Convert category map to sorted array
+      const categories = Array.from(categoryMap.values()).sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      return {
+        date: yesterday.toISOString().split('T')[0],
+        isToday: false,
+        dataSource: 'cached-yesterday',
+        seatsCount: seats.length,
+        insights: {
+          totalSales,
+          transactionCount,
+          averageTransactionValue,
+          grossProfit,
+          marginPercentage,
+          categories,
+          topCategories: categories.slice(0, 5) // Top 5 performing categories
+        }
+      };
+    } catch (error) {
+      strapi.log.error('[KeySeatService] Error getting yesterday sales insights:', {
+        userDocumentId,
+        error: error.message
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Gets historical sales insights from telemetry snapshots (for dates older than yesterday)
+   * @param userDocumentId - Document ID of the user
+   * @param targetDate - Target date (start of day)
+   * @returns Aggregated sales insights from historical snapshots
+   */
+  async getHistoricalSalesInsights(userDocumentId: string, targetDate: Date) {
+    try {
+      // Find all licenses for the user
+      const licenses = await strapi.documents('api::license.license').findMany({
+        filters: {
+          user: {
+            documentId: userDocumentId
+          }
+        },
+        status: 'published'
+      });
+
+      if (!licenses || licenses.length === 0) {
+        return {
+          date: targetDate.toISOString().split('T')[0],
+          isToday: false,
+          dataSource: 'historical',
+          insights: null,
+          seatsCount: 0,
+          snapshotsFound: 0,
+          message: 'No licenses found for user'
+        };
+      }
+
+      // Get license document IDs
+      const licenseDocumentIds = licenses.map(license => license.documentId);
+
+      // Find all seats for these licenses
+      const seats = await strapi.documents('api::key-seat.key-seat').findMany({
+        filters: {
+          license: {
+            documentId: {
+              $in: licenseDocumentIds
+            }
+          }
+        },
+        status: 'published',
+        fields: ['documentId', 'machineUUID']
+      });
+
+      if (!seats || seats.length === 0) {
+        return {
+          date: targetDate.toISOString().split('T')[0],
+          isToday: false,
+          dataSource: 'historical',
+          insights: null,
+          seatsCount: 0,
+          snapshotsFound: 0,
+          message: 'No seats found for user'
+        };
+      }
+
+      const seatDocumentIds = seats.map(seat => seat.documentId);
+
+      // Define date range for the target date (full day)
+      const startOfDay = new Date(targetDate);
+      startOfDay.setUTCHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(targetDate);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+
+      strapi.log.info('[KeySeatService] Querying historical snapshots:', {
+        targetDate: targetDate.toISOString(),
+        startOfDay: startOfDay.toISOString(),
+        endOfDay: endOfDay.toISOString(),
+        seatCount: seatDocumentIds.length
+      });
+
+      // Find all snapshots for this date across all user's seats
+      const snapshots = await strapi.documents('api::seat-telemetry-history.seat-telemetry-history').findMany({
+        filters: {
+          keySeat: {
+            documentId: {
+              $in: seatDocumentIds
+            }
+          },
+          snapshotType: 'daily',
+          capturedAt: {
+            $gte: startOfDay.toISOString(),
+            $lte: endOfDay.toISOString()
+          }
+        },
+        status: 'published',
+        populate: {
+          historicalKpiSummary: {
+            populate:{
+              categories:true
+            }
+          },
+          keySeat: {
+            fields: ['documentId', 'machineUUID']
+          }
+        }
+      });
+
+      if (!snapshots || snapshots.length === 0) {
+        return {
+          date: targetDate.toISOString().split('T')[0],
+          isToday: false,
+          dataSource: 'historical',
+          insights: null,
+          seatsCount: seats.length,
+          snapshotsFound: 0,
+          message: 'No snapshots found for this date'
+        };
+      }
+
+      strapi.log.info('[KeySeatService] Found historical snapshots:', {
+        count: snapshots.length,
+        targetDate: targetDate.toISOString()
+      });
+
+      // Aggregate data from snapshots' historicalKpiSummary.yesterday
+      // Note: When a snapshot is created, historicalKpiSummary.yesterday contains the previous day's data
+      // So for a snapshot created on day X, yesterday field contains day X-1 data
+      let totalSales = 0;
+      let transactionCount = 0;
+      let grossProfit = 0;
+      let hasData = false;
+
+      const categoryMap = new Map<string, {
+        categoryId: string;
+        categoryName: string;
+        totalRevenue: number;
+        totalQuantitySold: number;
+        transactionCount: number;
+      }>();
+
+      for (const snapshot of snapshots) {
+        const historicalKpi = snapshot.historicalKpiSummary as any;
+
+        if (!historicalKpi || typeof historicalKpi !== 'object' || !historicalKpi.yesterday) {
+          continue;
+        }
+
+        const yesterday = historicalKpi.yesterday;
+
+        hasData = true;
+        totalSales += yesterday.totalSales || 0;
+        transactionCount += yesterday.transactionCount || 0;
+        grossProfit += yesterday.grossProfit || 0;
+
+        // Aggregate categories
+        if (Array.isArray(yesterday.categories)) {
+          for (const category of yesterday.categories) {
+            const categoryId = category.categoryId || 'unknown';
+            
+            if (categoryMap.has(categoryId)) {
+              const existing = categoryMap.get(categoryId)!;
+              existing.totalRevenue += category.totalRevenue || 0;
+              existing.totalQuantitySold += category.totalQuantitySold || 0;
+              existing.transactionCount += category.transactionCount || 0;
+            } else {
+              categoryMap.set(categoryId, {
+                categoryId,
+                categoryName: category.categoryName || 'Unknown',
+                totalRevenue: category.totalRevenue || 0,
+                totalQuantitySold: category.totalQuantitySold || 0,
+                transactionCount: category.transactionCount || 0
+              });
+            }
+          }
+        }
+      }
+
+      if (!hasData) {
+        return {
+          date: targetDate.toISOString().split('T')[0],
+          isToday: false,
+          dataSource: 'historical',
+          insights: null,
+          seatsCount: seats.length,
+          snapshotsFound: snapshots.length,
+          message: 'No KPI data available in snapshots'
+        };
+      }
+
+      // Calculate derived metrics
+      const averageTransactionValue = transactionCount > 0 ? totalSales / transactionCount : 0;
+      const marginPercentage = totalSales > 0 ? (grossProfit / totalSales) * 100 : 0;
+
+      // Convert category map to sorted array
+      const categories = Array.from(categoryMap.values()).sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+      return {
+        date: targetDate.toISOString().split('T')[0],
+        isToday: false,
+        dataSource: 'historical',
+        seatsCount: seats.length,
+        snapshotsFound: snapshots.length,
+        insights: {
+          totalSales,
+          transactionCount,
+          averageTransactionValue,
+          grossProfit,
+          marginPercentage,
+          categories,
+          topCategories: categories.slice(0, 5) // Top 5 performing categories
+        }
+      };
+    } catch (error) {
+      strapi.log.error('[KeySeatService] Error getting historical sales insights:', {
+        userDocumentId,
+        targetDate: targetDate.toISOString(),
+        error: error.message
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Groups expenses by category and calculates totals
+   * @param expenses - Array of expense objects
+   * @returns Object with category totals
+   */
+  groupExpensesByCategory(expenses: any[]) {
+    const categoryTotals: Record<string, { total: number; count: number }> = {};
+
+    for (const expense of expenses) {
+      const category = expense.category || 'OTHER';
+      
+      if (!categoryTotals[category]) {
+        categoryTotals[category] = { total: 0, count: 0 };
+      }
+
+      categoryTotals[category].total += expense.amount || 0;
+      categoryTotals[category].count += 1;
+    }
+
+    return categoryTotals;
   }
 }));

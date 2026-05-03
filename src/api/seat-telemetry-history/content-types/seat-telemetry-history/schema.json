@@ -18,9 +18,14 @@
       "target": "api::key-seat.key-seat",
       "inversedBy": "telemetryHistory"
     },
-      "telemetryData": {
+    "telemetryData": {
       "type": "component",
       "component": "telemetry.realtime-telemetry",
+      "repeatable": false
+    }, 
+    "historicalKpiSummary": {
+     "type": "component",
+      "component": "telemetry.period-kpi",
       "repeatable": false
     },
     "capturedAt": {
@@ -36,11 +41,6 @@
         "hourly",
         "daily"
       ]
-    },
-    "historicalKpiSummary": {
-      "type": "component",
-      "component": "telemetry.historical-kpi-summary",
-      "repeatable": false
     }
   }
 }

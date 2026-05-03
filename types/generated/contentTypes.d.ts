@@ -678,7 +678,7 @@ export interface ApiSeatTelemetryHistorySeatTelemetryHistory
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     historicalKpiSummary: Schema.Attribute.Component<
-      'telemetry.historical-kpi-summary',
+      'telemetry.period-kpi',
       false
     >;
     keySeat: Schema.Attribute.Relation<'manyToOne', 'api::key-seat.key-seat'>;

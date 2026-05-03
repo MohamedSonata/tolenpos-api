@@ -23,6 +23,15 @@ export default {
       },
     },
     {
+      method: 'GET',
+      path: '/key-seats/sales-insights',
+      handler: 'key-seat.getSalesInsights',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
       method: 'POST',
       path: '/key-seats/test-snapshot',
       handler: 'key-seat.testSnapshot',

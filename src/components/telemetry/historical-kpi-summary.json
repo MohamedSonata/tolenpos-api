@@ -8,22 +8,22 @@
   "attributes": {
     "yesterday": {
       "type": "component",
-      "repeatable": false,
-      "component": "telemetry.period-kpi"
-    },
-    "thisWeek": {
-      "type": "component",
-      "repeatable": false,
-      "component": "telemetry.period-kpi"
-    },
-    "thisMonth": {
-      "type": "component",
-      "repeatable": false,
-      "component": "telemetry.period-kpi"
+      "component": "telemetry.period-kpi",
+      "repeatable": false
     },
     "cachedAt": {
       "type": "datetime",
       "required": true
+    },
+    "thisWeek": {
+      "type": "component",
+      "component": "telemetry.period-kpi",
+      "repeatable": false
+    },
+    "thisMonth": {
+      "type": "component",
+      "component": "telemetry.period-kpi",
+      "repeatable": false
     }
   }
 }

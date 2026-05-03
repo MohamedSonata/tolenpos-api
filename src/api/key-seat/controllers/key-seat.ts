@@ -404,5 +404,51 @@ export default factories.createCoreController('api::key-seat.key-seat', ({ strap
       strapi.log.error('[KeySeatController] Error getting aggregated KPI:', error);
       return ctx.internalServerError('Failed to get aggregated KPI data');
     }
+  },
+
+  /**
+   * GET /api/key-seats/sales-insights
+   * Gets sales insights for a specific date across all user's seats
+   * Query params:
+   *   - date: ISO date string (YYYY-MM-DD) - defaults to today
+   * 
+   * Routes to realtime telemetry (today) or historical snapshots (past dates)
+   */
+  async getSalesInsights(ctx) {
+    try {
+      const user = ctx.state.user;
+
+      if (!user) {
+        return ctx.unauthorized('Authentication required');
+      }
+
+      // Get target date from query params (default to today)
+      const targetDateParam = ctx.query.date;
+      const targetDate = targetDateParam ? new Date(targetDateParam as string) : new Date();
+
+      // Validate date
+      if (isNaN(targetDate.getTime())) {
+        return ctx.badRequest('Invalid date format. Use YYYY-MM-DD');
+      }
+
+      strapi.log.info('[KeySeatController] Sales insights requested', {
+        userDocumentId: user.documentId,
+        targetDate: targetDate.toISOString(),
+        queryParam: targetDateParam
+      });
+
+      // Get sales insights
+      const service = strapi.service('api::key-seat.key-seat');
+      const insights = await service.getSalesInsights(user.documentId, targetDate);
+
+      return ctx.send({
+        success: true,
+        data: insights
+      });
+
+    } catch (error) {
+      strapi.log.error('[KeySeatController] Error getting sales insights:', error);
+      return ctx.internalServerError('Failed to get sales insights');
+    }
   }
 }));
