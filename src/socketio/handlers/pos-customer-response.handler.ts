@@ -94,22 +94,6 @@ function handleMenuCategoriesResponse(
         categoriesCount: categories?.length || 0
       });
 
-      // Get customer socket to check if still connected
-      const customerSocket = io.sockets.sockets.get(customerSocketId);
-
-      if (!customerSocket) {
-        strapi.log.warn(`[POSCustomerResponseHandler] Customer socket no longer connected: ${customerSocketId}`);
-        return;
-      }
-
-      // Cancel timeout timer for the request
-      const timeoutKey = `timeout:menu:categories:${customerSocketId}`;
-      if (customerSocket.data[timeoutKey]) {
-        clearTimeout(customerSocket.data[timeoutKey]);
-        delete customerSocket.data[timeoutKey];
-        strapi.log.debug(`[POSCustomerResponseHandler] Cancelled timeout for menu categories request: ${customerSocketId}`);
-      }
-
       // Sanitize response - remove sensitive fields that POS might have included
       const sanitizedRest = { ...rest };
       const sensitiveFields = [
@@ -142,7 +126,8 @@ function handleMenuCategoriesResponse(
           timestamp: new Date().toISOString()
         });
         // Send generic error to customer instead of potentially sensitive data
-        customerSocket.emit(SocketIOEvents.EmitCustomerError, {
+        // Use io.to() for cross-replica support
+        io.to(customerSocketId).emit(SocketIOEvents.EmitCustomerError, {
           success: false,
           error: 'Invalid response from POS device',
           timestamp: new Date().toISOString()
@@ -150,7 +135,8 @@ function handleMenuCategoriesResponse(
         return;
       }
       
-      customerSocket.emit(SocketIOEvents.EmitCustomerMenuCategories, responsePayload);
+      // Emit to customer socket ID - works across replicas with Redis adapter
+      io.to(customerSocketId).emit(SocketIOEvents.EmitCustomerMenuCategories, responsePayload);
 
       strapi.log.info(`[POSCustomerResponseHandler] Response forwarded successfully`, {
         posSocketId: socket.id,
@@ -200,22 +186,6 @@ function handleMenuProductsResponse(
         categoryId
       });
 
-      // Get customer socket to check if still connected
-      const customerSocket = io.sockets.sockets.get(customerSocketId);
-
-      if (!customerSocket) {
-        strapi.log.warn(`[POSCustomerResponseHandler] Customer socket no longer connected: ${customerSocketId}`);
-        return;
-      }
-
-      // Cancel timeout timer for the request
-      const timeoutKey = `timeout:menu:products:${customerSocketId}`;
-      if (customerSocket.data[timeoutKey]) {
-        clearTimeout(customerSocket.data[timeoutKey]);
-        delete customerSocket.data[timeoutKey];
-        strapi.log.debug(`[POSCustomerResponseHandler] Cancelled timeout for menu products request: ${customerSocketId}`);
-      }
-
       // Sanitize response - remove sensitive fields that POS might have included
       const sanitizedRest = { ...rest };
       const sensitiveFields = [
@@ -249,7 +219,8 @@ function handleMenuProductsResponse(
           timestamp: new Date().toISOString()
         });
         // Send generic error to customer instead of potentially sensitive data
-        customerSocket.emit(SocketIOEvents.EmitCustomerError, {
+        // Use io.to() for cross-replica support
+        io.to(customerSocketId).emit(SocketIOEvents.EmitCustomerError, {
           success: false,
           error: 'Invalid response from POS device',
           timestamp: new Date().toISOString()
@@ -257,7 +228,8 @@ function handleMenuProductsResponse(
         return;
       }
       
-      customerSocket.emit(SocketIOEvents.EmitCustomerMenuProducts, responsePayload);
+      // Emit to customer socket ID - works across replicas with Redis adapter
+      io.to(customerSocketId).emit(SocketIOEvents.EmitCustomerMenuProducts, responsePayload);
 
       strapi.log.info(`[POSCustomerResponseHandler] Response forwarded successfully`, {
         posSocketId: socket.id,
@@ -308,22 +280,6 @@ function handleProductScanResponse(
         hasProduct: !!product
       });
 
-      // Get customer socket to check if still connected
-      const customerSocket = io.sockets.sockets.get(customerSocketId);
-
-      if (!customerSocket) {
-        strapi.log.warn(`[POSCustomerResponseHandler] Customer socket no longer connected: ${customerSocketId}`);
-        return;
-      }
-
-      // Cancel timeout timer for the request
-      const timeoutKey = `timeout:product:scan:${customerSocketId}`;
-      if (customerSocket.data[timeoutKey]) {
-        clearTimeout(customerSocket.data[timeoutKey]);
-        delete customerSocket.data[timeoutKey];
-        strapi.log.debug(`[POSCustomerResponseHandler] Cancelled timeout for product scan request: ${customerSocketId}`);
-      }
-
       // Sanitize response - remove sensitive fields that POS might have included
       const sanitizedRest = { ...rest };
       const sensitiveFields = [
@@ -357,7 +313,8 @@ function handleProductScanResponse(
           timestamp: new Date().toISOString()
         });
         // Send generic error to customer instead of potentially sensitive data
-        customerSocket.emit(SocketIOEvents.EmitCustomerError, {
+        // Use io.to() for cross-replica support
+        io.to(customerSocketId).emit(SocketIOEvents.EmitCustomerError, {
           success: false,
           error: 'Invalid response from POS device',
           timestamp: new Date().toISOString()
@@ -365,7 +322,8 @@ function handleProductScanResponse(
         return;
       }
       
-      customerSocket.emit(SocketIOEvents.EmitCustomerProductData, responsePayload);
+      // Emit to customer socket ID - works across replicas with Redis adapter
+      io.to(customerSocketId).emit(SocketIOEvents.EmitCustomerProductData, responsePayload);
 
       strapi.log.info(`[POSCustomerResponseHandler] Response forwarded successfully`, {
         posSocketId: socket.id,
