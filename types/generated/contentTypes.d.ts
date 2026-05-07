@@ -679,6 +679,56 @@ export interface ApiMobLatestAppsReleaseMobLatestAppsRelease
   };
 }
 
+export interface ApiOrderRequestOrderRequest
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'order_requests';
+  info: {
+    description: 'Tracks customer order requests for analytics and debugging';
+    displayName: 'Order Request';
+    pluralName: 'order-requests';
+    singularName: 'order-request';
+  };
+  options: {
+    comment: '';
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    customerName: Schema.Attribute.String & Schema.Attribute.Required;
+    customerPhone: Schema.Attribute.String & Schema.Attribute.Required;
+    customerSocketId: Schema.Attribute.String & Schema.Attribute.Required;
+    deliveryType: Schema.Attribute.Enumeration<['pickup', 'delivery']> &
+      Schema.Attribute.Required;
+    errorCode: Schema.Attribute.String;
+    errorMessage: Schema.Attribute.Text;
+    itemCount: Schema.Attribute.Integer & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::order-request.order-request'
+    > &
+      Schema.Attribute.Private;
+    orderId: Schema.Attribute.String;
+    publicSeatId: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    receiptNumber: Schema.Attribute.String;
+    requestId: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    status: Schema.Attribute.Enumeration<
+      ['pending', 'completed', 'failed', 'timeout']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending'>;
+    total: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiSeatTelemetryHistorySeatTelemetryHistory
   extends Struct.CollectionTypeSchema {
   collectionName: 'seat_telemetry_histories';
@@ -1335,6 +1385,7 @@ declare module '@strapi/strapi' {
       'api::key-seat.key-seat': ApiKeySeatKeySeat;
       'api::license.license': ApiLicenseLicense;
       'api::mob-latest-apps-release.mob-latest-apps-release': ApiMobLatestAppsReleaseMobLatestAppsRelease;
+      'api::order-request.order-request': ApiOrderRequestOrderRequest;
       'api::seat-telemetry-history.seat-telemetry-history': ApiSeatTelemetryHistorySeatTelemetryHistory;
       'api::subscription-plan.subscription-plan': ApiSubscriptionPlanSubscriptionPlan;
       'plugin::content-releases.release': PluginContentReleasesRelease;

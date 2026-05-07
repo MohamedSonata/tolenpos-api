@@ -14,7 +14,7 @@ import type { Core } from '@strapi/strapi';
 import { SocketIOEvents } from '../events_constants';
 import { SeatUpdatePayload, SeatSubscribePayload } from '../interfaces';
 import { multiReplicaSocketManager } from '../socket-manager';
-import { safeLogger, logObject } from '../utils/safe-logger';
+import { safeLogger } from '../utils/safe-logger';
 
 /**
  * Sets up seat update event handlers for Socket.IO connections
@@ -109,7 +109,7 @@ function handlePOSSeatUpdate(
         historicalKpiSummary
       );
       
-      logObject(strapi, '[SeatUpdateHandler] Updated Seat Data', updatedSeat);
+      // logObject(strapi, '[SeatUpdateHandler] Updated Seat Data', updatedSeat);
 
       // Emit success to POS client
       socket.emit(SocketIOEvents.EmitSeatUpdateSuccess, {

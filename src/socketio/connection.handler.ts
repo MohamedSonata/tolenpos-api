@@ -34,15 +34,18 @@ export function setupConnectionHandlers(
   io.on('connection', async (socket: Socket) => {
     strapi.log.info(`[ConnectionHandler] New connection: ${socket.id}`);
 
-    // Check if this is a customer connection (no auth required)
+    // Check if this is a customer or website connection (no auth required)
     const query = socket.handshake.query as any;
     const clientType = query.clientType as string;
 
-    if (clientType === 'customer') {
-      // Customer connections don't require authentication
-      strapi.log.info(`[ConnectionHandler] Customer connection detected: ${socket.id}`);
+    if (clientType === 'customer' || clientType === 'Website') {
+      // Customer and website connections don't require authentication
+      strapi.log.info(`[ConnectionHandler] ${clientType} connection detected: ${socket.id}`);
       
-      // Set up customer app handlers
+      // Store client type in socket data for handlers
+      socket.data.clientType = clientType;
+      
+      // Set up customer app handlers (works for both customer mobile app and website)
       setupCustomerAppHandlers(socket, strapi, io);
       
       // Handle disconnection (customer handler has its own disconnect logic)

@@ -1,0 +1,69 @@
+{
+  "kind": "collectionType",
+  "collectionName": "order_requests",
+  "info": {
+    "singularName": "order-request",
+    "pluralName": "order-requests",
+    "displayName": "Order Request",
+    "description": "Tracks customer order requests for analytics and debugging"
+  },
+  "options": {
+    "draftAndPublish": false,
+    "comment": ""
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "requestId": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "customerSocketId": {
+      "type": "string",
+      "required": true
+    },
+    "publicSeatId": {
+      "type": "string",
+      "required": true
+    },
+    "customerName": {
+      "type": "string",
+      "required": true
+    },
+    "customerPhone": {
+      "type": "string",
+      "required": true
+    },
+    "itemCount": {
+      "type": "integer",
+      "required": true
+    },
+    "total": {
+      "type": "decimal",
+      "required": true
+    },
+    "deliveryType": {
+      "type": "enumeration",
+      "enum": ["pickup", "delivery"],
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["pending", "completed", "failed", "timeout"],
+      "default": "pending",
+      "required": true
+    },
+    "orderId": {
+      "type": "string"
+    },
+    "receiptNumber": {
+      "type": "string"
+    },
+    "errorCode": {
+      "type": "string"
+    },
+    "errorMessage": {
+      "type": "text"
+    }
+  }
+}

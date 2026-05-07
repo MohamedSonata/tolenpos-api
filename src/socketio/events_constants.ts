@@ -338,4 +338,26 @@ export class SocketIOEvents {
    * Event emitted to customer app when a request times out
    */
   static readonly EmitCustomerTimeout = "customer:timeout";
+
+  // Customer Ordering Events
+
+  /**
+   * Event emitted by customer app to create an order
+   */
+  static readonly OnCustomerOrderCreate = "customer:order:create";
+
+  /**
+   * Event emitted to customer app with order creation response
+   */
+  static readonly EmitCustomerOrderResponse = "customer:order:create:response";
+
+  /**
+   * Event emitted to POS device to request order creation
+   */
+  static readonly EmitPOSOrderRequest = "pos:order:create:request";
+
+  /**
+   * Event emitted by POS device with order creation response
+   */
+  static readonly OnPOSOrderResponse = "pos:order:create:response";
 }

@@ -15,7 +15,8 @@ import { SocketIOEvents } from '../events_constants';
 import {
   validateConnectionPayload,
   validateMenuRequest,
-  validateBarcodeScanPayload
+  validateBarcodeScanPayload,
+  validateOrderPayload
 } from '../../api/key-seat/utils/customer-validation';
 import { safeLogger } from '../utils/safe-logger';
 
@@ -66,7 +67,8 @@ export function setupCustomerAppHandlers(
   strapi: Core.Strapi,
   io: SocketIOServer
 ): void {
-  strapi.log.info(`[CustomerAppHandler] Setting up handlers for socket ${socket.id}`);
+  const clientType = socket.data?.clientType || 'customer';
+  strapi.log.info(`[CustomerAppHandler] Setting up handlers for ${clientType} socket ${socket.id}`);
 
   // Handle customer connection
   handleCustomerConnection(socket, strapi, io);
@@ -79,6 +81,9 @@ export function setupCustomerAppHandlers(
 
   // Handle barcode scanning
   handleBarcodeScanning(socket, strapi, io);
+
+  // Handle customer order creation
+  handleCustomerOrderCreation(socket, strapi, io);
 
   // Handle disconnection
   handleCustomerDisconnection(socket, strapi, io);
@@ -98,6 +103,13 @@ function handleCustomerConnection(
 ): void {
   socket.on(SocketIOEvents.OnCustomerConnect, async (payload: CustomerConnectPayload) => {
     try {
+      const dd= safeLogger({    socketId: socket.id,
+        clientType: socket.data?.clientType,
+        hasPayload: !!payload,
+        payloadKeys: payload ? Object.keys(payload) : [],
+        publicSeatId: payload?.publicSeatId},true);
+      strapi.log.info(`[CustomerAppHandler] Received connection payload ${dd}`);
+
       // Validate and sanitize connection payload
       const validation = validateConnectionPayload(payload);
       
@@ -130,8 +142,8 @@ function handleCustomerConnection(
           allowCustomerApp: true
         },
         populate: {
-          license: true,
-          customerFcmTokens: true
+          license: true
+          // Don't populate customerFcmTokens to avoid component issues
         },
         status: 'published'
       });
@@ -200,48 +212,74 @@ function handleCustomerConnection(
       socket.data.allowBarcodeScanning = seat.allowBarcodeScanning;
       socket.data.allowCustomerOrdering = seat.allowCustomerOrdering;
       socket.data.connectionStartTime = Date.now(); // Track connection start time for duration calculation
+      socket.data.customerDeviceId = deviceId; // Store deviceId for notification lookup
 
-      // Handle FCM token storage if provided
-      let updatedCustomerFcmTokens = (seat.customerFcmTokens || []) as any[];
-      
+      // Prepare update data
+      const updateData: any = {
+        currentCustomerConnections: currentConnections + 1
+      };
+
+      // Handle FCM token storage if provided (typically for mobile apps, not websites)
       if (fcmToken && deviceId) {
-        const existingTokenIndex = updatedCustomerFcmTokens.findIndex(
-          (t: any) => t.token === fcmToken || t.deviceId === deviceId
-        );
-
-        if (existingTokenIndex >= 0) {
-          // Update existing token's lastUpdatedAt
-          updatedCustomerFcmTokens[existingTokenIndex] = {
-            token: updatedCustomerFcmTokens[existingTokenIndex].token,
-            deviceId: updatedCustomerFcmTokens[existingTokenIndex].deviceId,
-            platform: updatedCustomerFcmTokens[existingTokenIndex].platform,
-            deviceName: updatedCustomerFcmTokens[existingTokenIndex].deviceName || 'Unknown Device',
-            lastUpdatedAt: new Date().toISOString(),
-            isActive: true
-          };
-          strapi.log.info(`[CustomerAppHandler] Updated existing FCM token for device: ${deviceId}`);
-        } else {
-          // Add new FCM token with all required fields
-          updatedCustomerFcmTokens.push({
-            token: fcmToken,
-            deviceId,
-            platform: platform || 'web',
-            deviceName: deviceName || 'Unknown Device',
-            lastUpdatedAt: new Date().toISOString(),
-            isActive: true
+        try {
+          // Fetch seat with customerFcmTokens populated
+          const seatWithTokens = await strapi.documents('api::key-seat.key-seat').findOne({
+            documentId: seat.documentId,
+            populate: ['customerFcmTokens'],
+            status: 'published'
           });
-          strapi.log.info(`[CustomerAppHandler] Added new FCM token for device: ${deviceId}`);
+
+          const existingTokens = (seatWithTokens?.customerFcmTokens || []) as any[];
+          const existingTokenIndex = existingTokens.findIndex(
+            (t: any) => t.token === fcmToken || t.deviceId === deviceId
+          );
+
+          if (existingTokenIndex >= 0) {
+            // Update existing token
+            const updatedTokens = existingTokens.map((t: any, index: number) => {
+              if (index === existingTokenIndex) {
+                return {
+                  id: t.id, // Keep the component ID
+                  token: fcmToken,
+                  deviceId: t.deviceId,
+                  platform: t.platform,
+                  deviceName: t.deviceName || 'Unknown Device',
+                  lastUpdatedAt: new Date().toISOString(),
+                  isActive: true
+                };
+              }
+              return t;
+            });
+            updateData.customerFcmTokens = updatedTokens;
+            strapi.log.info(`[CustomerAppHandler] Updated existing FCM token for device: ${deviceId}`);
+          } else {
+            // Add new FCM token
+            const newToken = {
+              token: fcmToken,
+              deviceId,
+              platform: platform || 'web',
+              deviceName: deviceName || 'Unknown Device',
+              lastUpdatedAt: new Date().toISOString(),
+              isActive: true
+            };
+            updateData.customerFcmTokens = [...existingTokens, newToken];
+            strapi.log.info(`[CustomerAppHandler] Added new FCM token for device: ${deviceId}`);
+          }
+        } catch (fcmError) {
+          // Log FCM token error but don't fail the connection
+          strapi.log.warn(`[CustomerAppHandler] Failed to update FCM token, continuing without it`, {
+            socketId: socket.id,
+            deviceId,
+            error: fcmError.message
+          });
         }
       }
 
-      // Increment currentCustomerConnections and update FCM tokens
+      // Update seat with connection count and optionally FCM tokens
       await strapi.documents('api::key-seat.key-seat').update({
         documentId: seat.documentId,
-        status:"published",
-        data: {
-          currentCustomerConnections: currentConnections + 1,
-          customerFcmTokens: updatedCustomerFcmTokens
-        }
+        status: 'published',
+        data: updateData
       });
 
       // Notify POS device about customer connection
@@ -282,13 +320,16 @@ function handleCustomerConnection(
       });
 
     } catch (error) {
-      strapi.log.error(`[CustomerAppHandler] Error handling customer connection`, {
+      const errsaelog = safeLogger( {
         socketId: socket.id,
         publicSeatId: payload?.publicSeatId,
+        clientType: socket.data?.clientType,
         error: error.message,
         stack: error.stack,
         timestamp: new Date().toISOString()
-      });
+      },true);
+      console.log('errsaelog',errsaelog);
+      strapi.log.error(`[CustomerAppHandler] Error handling customer connection${errsaelog}`);
       socket.emit(SocketIOEvents.EmitCustomerConnectSuccess, {
         success: false,
         error: 'Failed to connect to seat',
@@ -365,12 +406,32 @@ function handleExplicitDisconnection(
       const seatRoom = `seat:${connectedSeatId}:customers`;
       socket.leave(seatRoom);
 
-      // Clear any pending timeout timers
+      // Clear any pending order timeout timers
+      // Requirements: 18.1, 18.2, 18.3, 18.4, 18.5, 18.6
+      let orderTimersCleared = 0;
       Object.keys(socket.data).forEach(key => {
-        if (key.startsWith('timeout:')) {
+        if (key.startsWith('timeout:order:')) {
           clearTimeout(socket.data[key]);
+          delete socket.data[key];
+          orderTimersCleared++;
         }
       });
+
+      // Clear any other pending timeout timers (menu, barcode, etc.)
+      Object.keys(socket.data).forEach(key => {
+        if (key.startsWith('timeout:') && !key.startsWith('timeout:order:')) {
+          clearTimeout(socket.data[key]);
+          delete socket.data[key];
+        }
+      });
+
+      // Log order timeout cleanup if any were cleared
+      if (orderTimersCleared > 0) {
+        strapi.log.info(`[CustomerAppHandler] Cleared pending order timeout timers`, {
+          socketId: socket.id,
+          orderTimersCleared
+        });
+      }
 
       // Clear socket data
       socket.data.connectedSeatId = undefined;
@@ -754,6 +815,259 @@ function handleBarcodeScanning(
 }
 
 /**
+ * Handles customer order creation requests
+ * Requirements: 3.1-3.15, 4.1-4.8, 5.1-5.6, 6.1-6.12, 7.1-7.12, 8.1-8.10, 11.1-11.10, 13.1-13.10, 14.1-14.11, 16.1-16.11, 20.1-20.10
+ * @param socket - Socket instance for the customer
+ * @param strapi - Strapi instance
+ * @param io - Socket.IO server instance
+ */
+function handleCustomerOrderCreation(
+  socket: Socket,
+  strapi: Core.Strapi,
+  io: SocketIOServer
+): void {
+  socket.on(SocketIOEvents.OnCustomerOrderCreate, async (payload: unknown) => {
+    try {
+      const { connectedSeatId, allowCustomerOrdering } = socket.data;
+
+      // Verify customer is connected to a seat
+      if (!connectedSeatId) {
+        socket.emit(SocketIOEvents.EmitCustomerOrderResponse, {
+          success: false,
+          error: 'Not connected to a seat',
+          code: 'NOT_CONNECTED',
+          timestamp: new Date().toISOString()
+        });
+        strapi.log.warn(`[CustomerAppHandler] Order rejected - Not connected to a seat`, {
+          socketId: socket.id,
+          requestType: 'order:create',
+          reason: 'NOT_CONNECTED'
+        });
+        return;
+      }
+
+      // Retrieve Key-Seat by connectedSeatId with populate for license
+      const seat = await strapi.documents('api::key-seat.key-seat').findOne({
+        documentId: connectedSeatId,
+        populate: { license: true },
+        status: 'published'
+      });
+
+      if (!seat) {
+        socket.emit(SocketIOEvents.EmitCustomerOrderResponse, {
+          success: false,
+          error: 'Seat not found',
+          code: 'NOT_CONNECTED',
+          timestamp: new Date().toISOString()
+        });
+        strapi.log.warn(`[CustomerAppHandler] Order rejected - Seat not found`, {
+          socketId: socket.id,
+          seatId: connectedSeatId,
+          requestType: 'order:create',
+          reason: 'Seat not found'
+        });
+        return;
+      }
+
+      // Verify allowCustomerOrdering feature flag is true
+      if (!allowCustomerOrdering) {
+        socket.emit(SocketIOEvents.EmitCustomerOrderResponse, {
+          success: false,
+          error: 'Customer ordering not enabled',
+          code: 'FEATURE_DISABLED',
+          timestamp: new Date().toISOString()
+        });
+        strapi.log.warn(`[CustomerAppHandler] Order rejected - Feature disabled`, {
+          socketId: socket.id,
+          seatId: connectedSeatId,
+          requestType: 'order:create',
+          reason: 'FEATURE_DISABLED'
+        });
+        return;
+      }
+
+      // Verify POS device is online (isConnected is true)
+      if (!seat.isConnected) {
+        socket.emit(SocketIOEvents.EmitCustomerOrderResponse, {
+          success: false,
+          error: 'Restaurant is currently offline',
+          code: 'POS_OFFLINE',
+          timestamp: new Date().toISOString()
+        });
+        strapi.log.warn(`[CustomerAppHandler] Order rejected - POS offline`, {
+          socketId: socket.id,
+          seatId: connectedSeatId,
+          publicSeatId: seat.publicSeatId,
+          requestType: 'order:create',
+          reason: 'POS_OFFLINE'
+        });
+        return;
+      }
+
+      // Validate order payload using validateOrderPayload utility
+      const validation = validateOrderPayload(payload);
+      
+      if (!validation.valid) {
+        socket.emit(SocketIOEvents.EmitCustomerOrderResponse, {
+          success: false,
+          error: validation.error || 'Invalid order data',
+          code: 'INVALID_PAYLOAD',
+          timestamp: new Date().toISOString()
+        });
+        strapi.log.warn(`[CustomerAppHandler] Order rejected - Invalid payload`, {
+          socketId: socket.id,
+          seatId: connectedSeatId,
+          requestType: 'order:create',
+          error: validation.error,
+          reason: 'INVALID_PAYLOAD'
+        });
+        return;
+      }
+
+      const sanitizedPayload = validation.sanitized!;
+
+      // Check rate limit: last order timestamp must be > 60 seconds ago
+      const lastOrderTimestamp = socket.data.lastOrderTimestamp || 0;
+      const currentTime = Date.now();
+      const timeSinceLastOrder = currentTime - lastOrderTimestamp;
+
+      if (timeSinceLastOrder < 60000) {
+        socket.emit(SocketIOEvents.EmitCustomerOrderResponse, {
+          success: false,
+          error: 'Please wait before placing another order',
+          code: 'RATE_LIMIT_EXCEEDED',
+          timestamp: new Date().toISOString()
+        });
+        strapi.log.warn(`[CustomerAppHandler] Order rejected - Rate limit exceeded`, {
+          socketId: socket.id,
+          seatId: connectedSeatId,
+          requestType: 'order:create',
+          timeSinceLastOrder: Math.floor(timeSinceLastOrder / 1000),
+          reason: 'RATE_LIMIT_EXCEEDED'
+        });
+        return;
+      }
+
+      // Create Order_Request_Tracker with status "pending"
+      const orderTracker = await strapi.documents('api::order-request.order-request').create({
+        data: {
+          requestId: sanitizedPayload.requestId,
+          customerSocketId: socket.id,
+          publicSeatId: sanitizedPayload.publicSeatId,
+          customerName: sanitizedPayload.customer.name,
+          customerPhone: sanitizedPayload.customer.phone,
+          itemCount: sanitizedPayload.items.length,
+          total: sanitizedPayload.total,
+          deliveryType: sanitizedPayload.customer.deliveryType,
+          status: 'pending'
+        },
+        status: 'published'
+      });
+
+      strapi.log.info(`[CustomerAppHandler] Order received`, {
+        socketId: socket.id,
+        seatId: connectedSeatId,
+        requestId: sanitizedPayload.requestId,
+        publicSeatId: sanitizedPayload.publicSeatId,
+        customerName: sanitizedPayload.customer.name,
+        itemCount: sanitizedPayload.items.length,
+        total: sanitizedPayload.total,
+        deliveryType: sanitizedPayload.customer.deliveryType
+      });
+
+      // Forward order to POS via io.to(pos:${keySeatDocumentId}) room
+      const posRoom = `pos:${connectedSeatId}`;
+      const orderRequestPayload = {
+        customerSocketId: socket.id,
+        requestId: sanitizedPayload.requestId,
+        publicSeatId: sanitizedPayload.publicSeatId,
+        customer: sanitizedPayload.customer,
+        items: sanitizedPayload.items,
+        orderNote: sanitizedPayload.orderNote,
+        subtotal: sanitizedPayload.subtotal,
+        tax: sanitizedPayload.tax,
+        total: sanitizedPayload.total,
+        timestamp: sanitizedPayload.timestamp
+      };
+
+      io.to(posRoom).emit(SocketIOEvents.EmitPOSOrderRequest, orderRequestPayload);
+
+      strapi.log.info(`[CustomerAppHandler] Order forwarded to POS`, {
+        socketId: socket.id,
+        seatId: connectedSeatId,
+        requestId: sanitizedPayload.requestId,
+        publicSeatId: sanitizedPayload.publicSeatId,
+        itemCount: sanitizedPayload.items.length,
+        total: sanitizedPayload.total
+      });
+
+      // Store customer deviceId for notification lookup later
+      socket.data[`order:${sanitizedPayload.requestId}:deviceId`] = sanitizedPayload.customer.deviceId || socket.data.customerDeviceId;
+
+      // Start 60-second monitoring timer (for logging only, doesn't cancel order)
+      const timeoutId = setTimeout(async () => {
+        try {
+          // Check if order is still pending
+          const trackers = await strapi.documents('api::order-request.order-request').findMany({
+            filters: { requestId: sanitizedPayload.requestId },
+            status: 'published'
+          });
+
+          if (trackers.length > 0 && trackers[0].status === 'pending') {
+            strapi.log.warn(`[CustomerAppHandler] Order still pending after 60s (not cancelled, just monitoring)`, {
+              socketId: socket.id,
+              seatId: connectedSeatId,
+              requestId: sanitizedPayload.requestId,
+              publicSeatId: sanitizedPayload.publicSeatId,
+              elapsedSeconds: 60
+            });
+
+            // Emit informational message to customer (order still processing)
+            socket.emit(SocketIOEvents.EmitCustomerOrderResponse, {
+              success: true,
+              pending: true,
+              message: 'Your order is being processed by the cashier',
+              requestId: sanitizedPayload.requestId,
+              timestamp: new Date().toISOString()
+            });
+          }
+
+          // Clear timeout from socket data
+          delete socket.data[`timeout:order:${sanitizedPayload.requestId}`];
+        } catch (error) {
+          strapi.log.error(`[CustomerAppHandler] Error in order monitoring`, {
+            socketId: socket.id,
+            requestId: sanitizedPayload.requestId,
+            error: error.message
+          });
+        }
+      }, 60000);
+
+      // Store timeout ID in socket.data
+      socket.data[`timeout:order:${sanitizedPayload.requestId}`] = timeoutId;
+
+      // Update socket.data.lastOrderTimestamp to current time
+      socket.data.lastOrderTimestamp = currentTime;
+
+    } catch (error) {
+      strapi.log.error(`[CustomerAppHandler] Error handling customer order creation`, {
+        socketId: socket.id,
+        error: error.message,
+        stack: error.stack,
+        requestType: 'order:create',
+        timestamp: new Date().toISOString()
+      });
+      socket.emit(SocketIOEvents.EmitCustomerOrderResponse, {
+        success: false,
+        error: 'Failed to process order',
+        code: 'ROUTING_ERROR',
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+}
+
+/**
  * Handles customer disconnection and cleanup
  * Requirements: 12.1-12.6
  * @param socket - Socket instance for the customer
@@ -822,12 +1136,32 @@ function handleCustomerDisconnection(
       const seatRoom = `seat:${connectedSeatId}:customers`;
       socket.leave(seatRoom);
 
-      // Clear any pending timeout timers
+      // Clear any pending order timeout timers
+      // Requirements: 18.1, 18.2, 18.3, 18.4, 18.5, 18.6
+      let orderTimersCleared = 0;
       Object.keys(socket.data).forEach(key => {
-        if (key.startsWith('timeout:')) {
+        if (key.startsWith('timeout:order:')) {
           clearTimeout(socket.data[key]);
+          delete socket.data[key];
+          orderTimersCleared++;
         }
       });
+
+      // Clear any other pending timeout timers (menu, barcode, etc.)
+      Object.keys(socket.data).forEach(key => {
+        if (key.startsWith('timeout:') && !key.startsWith('timeout:order:')) {
+          clearTimeout(socket.data[key]);
+          delete socket.data[key];
+        }
+      });
+
+      // Log order timeout cleanup if any were cleared
+      if (orderTimersCleared > 0) {
+        strapi.log.info(`[CustomerAppHandler] Cleared pending order timeout timers`, {
+          socketId: socket.id,
+          orderTimersCleared
+        });
+      }
 
       strapi.log.info(`[CustomerAppHandler] Customer disconnected`, {
         socketId: socket.id,
