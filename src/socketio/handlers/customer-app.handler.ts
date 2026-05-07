@@ -239,7 +239,7 @@ function handleCustomerConnection(
             const updatedTokens = existingTokens.map((t: any, index: number) => {
               if (index === existingTokenIndex) {
                 return {
-                  id: t.id, // Keep the component ID
+                  // id: t.id, // Keep the component ID
                   token: fcmToken,
                   deviceId: t.deviceId,
                   platform: t.platform,

@@ -39,7 +39,7 @@ const config: Core.Config.Middlewares = [
   {
     name: 'strapi::cors',
     config: {
-      origin: ['http://localhost:3000', 'http://localhost:1334','https://albik.xefro.net', '*'],
+      origin: ['http://localhost:3000', 'http://localhost:1334', 'http://localhost:5173','https://albik.xefro.net', '*'],
       credentials: true,
     },
   },
