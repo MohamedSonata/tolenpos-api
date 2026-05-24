@@ -12,6 +12,7 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import type { Core } from '@strapi/strapi';
 import { SocketIOEvents } from '../events_constants';
+import { SocketClientType, getClientTypeName, type SocketData } from '../types/client-types';
 import {
   validateConnectionPayload,
   validateMenuRequest,
@@ -19,6 +20,7 @@ import {
   validateOrderPayload
 } from '../../api/key-seat/utils/customer-validation';
 import { safeLogger } from '../utils/safe-logger';
+import { cleanupStaleSocketId } from '../utils/customer-notification-helper';
 
 /**
  * Interface for customer connection payload
@@ -57,7 +59,7 @@ interface BarcodeScanPayload {
 
 /**
  * Sets up customer app event handlers for Socket.IO connections
- * This should be called for connections with clientType: "customer"
+ * This should be called for customer-facing connections (mobile or web)
  * @param socket - Socket instance
  * @param strapi - Strapi instance
  * @param io - Socket.IO server instance
@@ -67,8 +69,9 @@ export function setupCustomerAppHandlers(
   strapi: Core.Strapi,
   io: SocketIOServer
 ): void {
-  const clientType = socket.data?.clientType || 'customer';
-  strapi.log.info(`[CustomerAppHandler] Setting up handlers for ${clientType} socket ${socket.id}`);
+  const clientType = socket.data?.clientType || SocketClientType.CUSTOMER_MOBILE;
+  const clientTypeName = getClientTypeName(clientType);
+  strapi.log.info(`[CustomerAppHandler] Setting up handlers for ${clientTypeName} socket ${socket.id}`);
 
   // Handle customer connection
   handleCustomerConnection(socket, strapi, io);
@@ -213,6 +216,7 @@ function handleCustomerConnection(
       socket.data.allowCustomerOrdering = seat.allowCustomerOrdering;
       socket.data.connectionStartTime = Date.now(); // Track connection start time for duration calculation
       socket.data.customerDeviceId = deviceId; // Store deviceId for notification lookup
+      socket.data.customerSessionId = `${socket.id}_${Date.now()}`; // Unique session identifier
 
       // Prepare update data
       const updateData: any = {
@@ -235,35 +239,40 @@ function handleCustomerConnection(
           );
 
           if (existingTokenIndex >= 0) {
-            // Update existing token
+            // Update existing token with current socketId
             const updatedTokens = existingTokens.map((t: any, index: number) => {
               if (index === existingTokenIndex) {
                 return {
-                  // id: t.id, // Keep the component ID
                   token: fcmToken,
                   deviceId: t.deviceId,
                   platform: t.platform,
                   deviceName: t.deviceName || 'Unknown Device',
                   lastUpdatedAt: new Date().toISOString(),
-                  isActive: true
+                  isActive: true,
+                  socketId: socket.id // Track current socket connection
                 };
               }
               return t;
             });
             updateData.customerFcmTokens = updatedTokens;
-            strapi.log.info(`[CustomerAppHandler] Updated existing FCM token for device: ${deviceId}`);
+            strapi.log.info(`[CustomerAppHandler] Updated existing FCM token for device: ${deviceId}`, {
+              socketId: socket.id
+            });
           } else {
-            // Add new FCM token
+            // Add new FCM token with socketId
             const newToken = {
               token: fcmToken,
               deviceId,
               platform: platform || 'web',
               deviceName: deviceName || 'Unknown Device',
               lastUpdatedAt: new Date().toISOString(),
-              isActive: true
+              isActive: true,
+              socketId: socket.id // Track socket connection for mobile clients
             };
             updateData.customerFcmTokens = [...existingTokens, newToken];
-            strapi.log.info(`[CustomerAppHandler] Added new FCM token for device: ${deviceId}`);
+            strapi.log.info(`[CustomerAppHandler] Added new FCM token for device: ${deviceId}`, {
+              socketId: socket.id
+            });
           }
         } catch (fcmError) {
           // Log FCM token error but don't fail the connection
@@ -273,6 +282,13 @@ function handleCustomerConnection(
             error: fcmError.message
           });
         }
+      } else if (deviceId && !fcmToken) {
+        // Web client without FCM token - still track the connection
+        strapi.log.info(`[CustomerAppHandler] Web client connected without FCM token`, {
+          socketId: socket.id,
+          deviceId,
+          clientType: socket.data?.clientType
+        });
       }
 
       // Update seat with connection count and optionally FCM tokens
@@ -440,6 +456,9 @@ function handleExplicitDisconnection(
       socket.data.allowBarcodeScanning = undefined;
       socket.data.allowCustomerOrdering = undefined;
       socket.data.connectionStartTime = undefined;
+
+      // Clean up socketId reference in FCM tokens (for mobile clients)
+      await cleanupStaleSocketId(strapi, connectedSeatId, socket.id);
 
       strapi.log.info(`[CustomerAppHandler] Customer explicitly disconnected`, {
         socketId: socket.id,
@@ -1162,6 +1181,9 @@ function handleCustomerDisconnection(
           orderTimersCleared
         });
       }
+
+      // Clean up socketId reference in FCM tokens (for mobile clients)
+      await cleanupStaleSocketId(strapi, connectedSeatId, socket.id);
 
       strapi.log.info(`[CustomerAppHandler] Customer disconnected`, {
         socketId: socket.id,

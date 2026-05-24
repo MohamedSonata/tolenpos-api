@@ -40,9 +40,9 @@ interface OrderNotificationPayload {
  * Sends order status notification to customer device
  * @param strapi - Strapi instance
  * @param keySeatDocumentId - Key-Seat document ID
- * @param customerSocketId - Customer socket ID (used for logging)
+ * @param customerSocketId - Customer socket ID (used for precise token matching)
  * @param payload - Order notification payload
- * @param deviceId - Optional device ID for precise token matching
+ * @param deviceId - Optional device ID for fallback token matching
  */
 export async function sendOrderStatusNotification(
   strapi: Core.Strapi,
@@ -60,22 +60,30 @@ export async function sendOrderStatusNotification(
     });
 
     if (!seat || !seat.customerFcmTokens || seat.customerFcmTokens.length === 0) {
-      strapi.log.warn(`[OrderNotification] No customer FCM tokens found for seat ${keySeatDocumentId}`);
+      strapi.log.info(`[OrderNotification] No customer FCM tokens found (likely web client)`, {
+        keySeatDocumentId,
+        customerSocketId
+      });
       return;
     }
 
-    // Find the FCM token matching the customer's device
+    // Find the FCM token matching the customer's socket/device
     const customerTokens = seat.customerFcmTokens as any[];
     let targetToken: any;
 
-    if (deviceId) {
-      // Try to find exact device match
+    // Priority 1: Match by socketId (most accurate for current connection)
+    targetToken = customerTokens.find(
+      (t: any) => t.socketId === customerSocketId && t.isActive !== false
+    );
+
+    // Priority 2: Match by deviceId if provided
+    if (!targetToken && deviceId) {
       targetToken = customerTokens.find(
         (t: any) => t.deviceId === deviceId && t.isActive !== false
       );
     }
 
-    // Fallback to most recent active token if no device match
+    // Priority 3: Fallback to most recent active token (last resort)
     if (!targetToken) {
       targetToken = customerTokens
         .filter((t: any) => t.isActive !== false)
@@ -87,9 +95,21 @@ export async function sendOrderStatusNotification(
     }
 
     if (!targetToken) {
-      strapi.log.warn(`[OrderNotification] No active customer FCM token found for seat ${keySeatDocumentId}`);
+      strapi.log.warn(`[OrderNotification] No active customer FCM token found`, {
+        keySeatDocumentId,
+        customerSocketId,
+        deviceId,
+        totalTokens: customerTokens.length
+      });
       return;
     }
+
+    strapi.log.info(`[OrderNotification] Found target FCM token`, {
+      customerSocketId,
+      deviceId: targetToken.deviceId,
+      matchedBy: targetToken.socketId === customerSocketId ? 'socketId' : 
+                 (targetToken.deviceId === deviceId ? 'deviceId' : 'fallback')
+    });
 
     // Prepare notification content
     let title: string;

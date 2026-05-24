@@ -15,6 +15,7 @@ import { SocketIOEvents } from '../events_constants';
 import { SeatUpdatePayload, SeatSubscribePayload } from '../interfaces';
 import { multiReplicaSocketManager } from '../socket-manager';
 import { safeLogger } from '../utils/safe-logger';
+import { SocketClientType, type SocketData } from '../types/client-types';
 
 /**
  * Sets up seat update event handlers for Socket.IO connections
@@ -37,13 +38,13 @@ export function setupSeatUpdateHandlers(
   strapi.log.info(`[SeatUpdateHandler] Setting up handlers for socket ${socket.id}, clientType: ${socket.data.clientType}`);
 
   // POS: Handle seat update events
-  if (socket.data.clientType === 'pos') {
+  if (socket.data.clientType === SocketClientType.POS_DESKTOP) {
     strapi.log.info(`[SeatUpdateHandler] Registering POS handlers for socket ${socket.id}`);
     handlePOSSeatUpdate(socket, strapi, io);
   }
 
   // Mobile: Handle seat subscription events
-  if (socket.data.clientType === 'mobile') {
+  if (socket.data.clientType === SocketClientType.ADMIN_MOBILE) {
     strapi.log.info(`[SeatUpdateHandler] Registering mobile handlers for socket ${socket.id}`);
     handleMobileSeatSubscription(socket, strapi);
   }

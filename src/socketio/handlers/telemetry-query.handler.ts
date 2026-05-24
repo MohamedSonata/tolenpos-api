@@ -18,6 +18,7 @@ import {
   TelemetryQueryError
 } from '../interfaces';
 import { multiReplicaSocketManager } from '../socket-manager';
+import { SocketClientType, type SocketData } from '../types/client-types';
 import { redisStateManager, PendingRequest } from '../redis-state-manager';
 
 // Timeout for waiting for POS response (10 seconds)
@@ -41,12 +42,12 @@ export function setupTelemetryQueryHandlers(
   strapi.log.info(`[TelemetryQueryHandler] Setting up handlers for socket ${socket.id}, clientType: ${socket.data.clientType}`);
 
   // Mobile: Handle telemetry query requests
-  if (socket.data.clientType === 'mobile') {
+  if (socket.data.clientType === SocketClientType.ADMIN_MOBILE) {
     handleMobileTelemetryQuery(socket, strapi, io);
   }
 
   // POS: Handle telemetry query responses
-  if (socket.data.clientType === 'pos') {
+  if (socket.data.clientType === SocketClientType.POS_DESKTOP) {
     handlePOSTelemetryResponse(socket, strapi, io);
   }
 

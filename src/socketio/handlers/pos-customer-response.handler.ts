@@ -14,6 +14,12 @@ import type { Core } from '@strapi/strapi';
 import { SocketIOEvents } from '../events_constants';
 import { ensureNoSensitiveData } from '../../api/key-seat/utils/customer-validation';
 import { sendOrderStatusNotification } from '../utils/order-notification-helper';
+import { SocketClientType, type SocketData } from '../types/client-types';
+import { 
+  findCustomerFcmToken, 
+  isCustomerConnected, 
+  getCustomerSocketData 
+} from '../utils/customer-notification-helper';
 
 /**
  * Interface for POS menu categories response payload
@@ -639,7 +645,7 @@ function handlePOSOrderResponse(
 
       // Forward sanitized response to customer via io.to(customerSocketId) (Req 9.12, 9.13, 10.1-10.9)
       // Handle disconnected customer sockets gracefully (Req 10.12)
-      const customerSocketExists = io.sockets.sockets.has(customerSocketId);
+      const customerSocketExists = isCustomerConnected(io, customerSocketId);
       
       if (!customerSocketExists) {
         strapi.log.warn(`[POSCustomerResponseHandler] Customer socket disconnected - will send notification instead`, {
@@ -650,6 +656,12 @@ function handlePOSOrderResponse(
       } else {
         // Emit to customer socket ID - works across replicas with Redis adapter
         io.to(customerSocketId).emit(SocketIOEvents.EmitCustomerOrderResponse, responsePayload);
+        
+        strapi.log.info(`[POSCustomerResponseHandler] Response sent to customer socket`, {
+          customerSocketId,
+          requestId,
+          success
+        });
       }
 
       // Send push notification as backup or for disconnected customers
@@ -661,24 +673,48 @@ function handlePOSOrderResponse(
         if (keySeatDocumentId) {
           // Try to get deviceId from customer socket if still connected
           let deviceId: string | undefined;
-          const customerSocket = io.sockets.sockets.get(customerSocketId);
-          if (customerSocket?.data) {
-            deviceId = customerSocket.data.customerDeviceId || 
-                      customerSocket.data[`order:${requestId}:deviceId`];
+          const customerSocketData = getCustomerSocketData(io, customerSocketId);
+          if (customerSocketData) {
+            deviceId = customerSocketData.customerDeviceId || 
+                      customerSocketData[`order:${requestId}:deviceId`];
           }
 
-          await sendOrderStatusNotification(
+          // Find the specific customer's FCM token
+          const customerFcmToken = await findCustomerFcmToken(
             strapi,
             keySeatDocumentId,
             customerSocketId,
-            {
-              requestId,
-              success,
-              order,
-              error
-            },
             deviceId
           );
+
+          if (customerFcmToken) {
+            // Send notification only to this specific customer
+            await sendOrderStatusNotification(
+              strapi,
+              keySeatDocumentId,
+              customerSocketId,
+              {
+                requestId,
+                success,
+                order,
+                error
+              },
+              customerFcmToken.deviceId
+            );
+            
+            strapi.log.info(`[POSCustomerResponseHandler] Notification sent to specific customer`, {
+              customerSocketId,
+              deviceId: customerFcmToken.deviceId,
+              platform: customerFcmToken.platform,
+              requestId
+            });
+          } else {
+            strapi.log.info(`[POSCustomerResponseHandler] No FCM token found for customer (likely web client)`, {
+              customerSocketId,
+              deviceId,
+              requestId
+            });
+          }
         } else {
           strapi.log.warn(`[POSCustomerResponseHandler] Cannot send notification - keySeatDocumentId not found in POS socket data`, {
             posSocketId: socket.id,

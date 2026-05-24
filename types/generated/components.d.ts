@@ -339,6 +339,7 @@ export interface UserFcmToken extends Struct.ComponentSchema {
     lastUpdatedAt: Schema.Attribute.DateTime;
     platform: Schema.Attribute.Enumeration<['ios', 'android', 'web']> &
       Schema.Attribute.Required;
+    socketId: Schema.Attribute.String;
     token: Schema.Attribute.String & Schema.Attribute.Required;
   };
 }

@@ -13,6 +13,14 @@ import { setupTelemetryQueryHandlers } from './handlers/telemetry-query.handler'
 import { setupCustomerAppHandlers } from './handlers/customer-app.handler';
 import { setupPOSCustomerResponseHandlers } from './handlers/pos-customer-response.handler';
 import { initializeSocketManager, multiReplicaSocketManager } from './socket-manager';
+import {
+  SocketClientType,
+  mapLegacyClientType,
+  requiresAuthentication,
+  isCustomerClient,
+  getClientTypeName,
+  type SocketData,
+} from './types/client-types';
 
 // Constants
 const USER_SOCKET_TTL = 86400; // 24 hours in seconds
@@ -34,88 +42,170 @@ export function setupConnectionHandlers(
   io.on('connection', async (socket: Socket) => {
     strapi.log.info(`[ConnectionHandler] New connection: ${socket.id}`);
 
-    // Check if this is a customer or website connection (no auth required)
+    // Parse and validate client type
     const query = socket.handshake.query as any;
-    const clientType = query.clientType as string;
+    const rawClientType = query.clientType as string;
+    const clientType = mapLegacyClientType(rawClientType);
 
-    if (clientType === 'customer' || clientType === 'Website') {
-      // Customer and website connections don't require authentication
-      strapi.log.info(`[ConnectionHandler] ${clientType} connection detected: ${socket.id}`);
-      
-      // Store client type in socket data for handlers
-      socket.data.clientType = clientType;
-      
-      // Set up customer app handlers (works for both customer mobile app and website)
-      setupCustomerAppHandlers(socket, strapi, io);
-      
-      // Handle disconnection (customer handler has its own disconnect logic)
+    if (!clientType) {
+      strapi.log.warn(`[ConnectionHandler] Invalid client type: ${rawClientType}`);
+      socket.disconnect(true);
       return;
     }
 
-    // Authenticate the connection for POS and mobile clients (Requirement 6.1)
-    const authenticated = await authenticateUserConnection({ strapi }).authenticateUserConnection(socket);
+    strapi.log.info(`[ConnectionHandler] ${getClientTypeName(clientType)} connection: ${socket.id}`);
 
-    if (!authenticated) {
-      strapi.log.warn(`[ConnectionHandler] Authentication failed for socket ${socket.id}`);
+    // Handle customer-facing clients (no authentication required)
+    if (isCustomerClient(clientType)) {
+      await handleCustomerConnection(socket, clientType, strapi, io);
       return;
     }
 
-    // Get user info and client type from socket
-    const userId = (socket as any).userID;
-    const authenticatedClientType = (socket as any).clientType;
-    const machineUUID = (socket as any).machineUUID;
-    const keySeatDocumentId = (socket as any).keySeatDocumentId;
-    
-    strapi.log.warn(`[ConnectionHandler] New connection User ID: ${userId}, Client Type: ${authenticatedClientType}`);
-    
-    if (userId) {
-      // Determine user role and document ID
-      const userInfo = await getUserInfo(strapi, userId);
-      
-      if (userInfo) {
-        // Store user info in socket data for easy access
-        socket.data = {
-          userId,
-          documentId: userInfo.documentId,
-          clientType: authenticatedClientType,
-          machineUUID,
-          keySeatDocumentId,
-        };
-        strapi.log.warn(`[ConnectionHandler] New connection User info: ${JSON.stringify(socket.data)}`);
-
-        // Map user to socket based on client type
-        if (authenticatedClientType === 'pos' && keySeatDocumentId) {
-          // Update key-seat socket ID for POS clients
-          await updateKeySeatSocketId(socket, keySeatDocumentId, strapi);
-          
-          // Send current plan to POS on connection (use documentId, not userId)
-          await sendCurrentPlanToPOS(socket, userInfo.documentId, strapi);
-          
-          // Set up POS customer response handlers for POS clients
-          setupPOSCustomerResponseHandlers(socket, strapi, io);
-        } else {
-          // Update user socket ID for mobile clients
-          await mapUserToSocket(socket, userInfo);
-        }
-
-        // Join appropriate rooms for cross-replica communication
-        await multiReplicaSocketManager.joinUserRooms(socket);
-
-        // Set up seat update handlers AFTER socket.data is populated
-        setupSeatUpdateHandlers(socket, strapi, io);
-        
-        // Set up telemetry query handlers
-        setupTelemetryQueryHandlers(socket, strapi, io);
-      }
+    // Handle authenticated clients (POS Desktop and Admin Mobile)
+    if (requiresAuthentication(clientType)) {
+      await handleAuthenticatedConnection(socket, clientType, strapi, io);
+      return;
     }
 
-    // Handle disconnection
-    socket.on('disconnect', async () => {
-      // Leave rooms before handling disconnection
-      await multiReplicaSocketManager.leaveUserRooms(socket);
-      await handleDisconnection(socket, strapi, io);
-    });
+    // Unknown client type (should never reach here due to validation above)
+    strapi.log.error(`[ConnectionHandler] Unhandled client type: ${clientType}`);
+    socket.disconnect(true);
   });
+}
+
+/**
+ * Handles customer-facing client connections (no auth required)
+ */
+async function handleCustomerConnection(
+  socket: Socket,
+  clientType: SocketClientType,
+  strapi: Core.Strapi,
+  io: SocketIOServer
+): Promise<void> {
+  // Store client type in socket data
+  const socketData: SocketData = {
+    clientType,
+  };
+  socket.data = socketData;
+
+  // Set up customer app handlers
+  setupCustomerAppHandlers(socket, strapi, io);
+
+  strapi.log.info(`[ConnectionHandler] ${getClientTypeName(clientType)} setup complete: ${socket.id}`);
+}
+
+/**
+ * Handles authenticated client connections (POS Desktop and Admin Mobile)
+ */
+async function handleAuthenticatedConnection(
+  socket: Socket,
+  clientType: SocketClientType,
+  strapi: Core.Strapi,
+  io: SocketIOServer
+): Promise<void> {
+  // Authenticate the connection (Requirement 6.1)
+  const authenticated = await authenticateUserConnection({ strapi }).authenticateUserConnection(socket);
+
+  if (!authenticated) {
+    strapi.log.warn(`[ConnectionHandler] Authentication failed for ${getClientTypeName(clientType)}: ${socket.id}`);
+    return;
+  }
+
+  // Get authenticated user info from socket
+  const userId = (socket as any).userID;
+  const machineUUID = (socket as any).machineUUID;
+  const keySeatDocumentId = (socket as any).keySeatDocumentId;
+
+  strapi.log.info(`[ConnectionHandler] Authenticated ${getClientTypeName(clientType)} - User ID: ${userId}`);
+
+  if (!userId) {
+    strapi.log.error(`[ConnectionHandler] Missing user ID after authentication`);
+    socket.disconnect(true);
+    return;
+  }
+
+  // Get user document ID
+  const userInfo = await getUserInfo(strapi, userId);
+  if (!userInfo) {
+    strapi.log.error(`[ConnectionHandler] User not found: ${userId}`);
+    socket.disconnect(true);
+    return;
+  }
+
+  // Store complete socket data
+  const socketData: SocketData = {
+    userId,
+    documentId: userInfo.documentId,
+    clientType,
+    machineUUID,
+    keySeatDocumentId,
+  };
+  socket.data = socketData;
+
+  strapi.log.info(`[ConnectionHandler] Socket data initialized:`, {
+    clientType: getClientTypeName(clientType),
+    userId,
+    documentId: userInfo.documentId,
+  });
+
+  // Client-specific setup
+  if (clientType === SocketClientType.POS_DESKTOP) {
+    await handlePOSDesktopSetup(socket, keySeatDocumentId, userInfo.documentId, strapi, io);
+  } else if (clientType === SocketClientType.ADMIN_MOBILE) {
+    await handleAdminMobileSetup(socket, userInfo, strapi);
+  }
+
+  // Join appropriate rooms for cross-replica communication
+  await multiReplicaSocketManager.joinUserRooms(socket);
+
+  // Set up common handlers for authenticated clients
+  setupSeatUpdateHandlers(socket, strapi, io);
+  setupTelemetryQueryHandlers(socket, strapi, io);
+
+  // Handle disconnection
+  socket.on('disconnect', async () => {
+    await multiReplicaSocketManager.leaveUserRooms(socket);
+    await handleDisconnection(socket, strapi, io);
+  });
+
+  strapi.log.info(`[ConnectionHandler] ${getClientTypeName(clientType)} setup complete: ${socket.id}`);
+}
+
+/**
+ * Handles POS Desktop specific setup
+ */
+async function handlePOSDesktopSetup(
+  socket: Socket,
+  keySeatDocumentId: string | undefined,
+  userDocumentId: string,
+  strapi: Core.Strapi,
+  io: SocketIOServer
+): Promise<void> {
+  if (!keySeatDocumentId) {
+    strapi.log.warn(`[ConnectionHandler] POS Desktop missing keySeatDocumentId`);
+    return;
+  }
+
+  // Update key-seat connection info
+  await updateKeySeatSocketId(socket, keySeatDocumentId, strapi);
+
+  // Send current plan to POS
+  await sendCurrentPlanToPOS(socket, userDocumentId, strapi);
+
+  // Set up POS-specific handlers
+  setupPOSCustomerResponseHandlers(socket, strapi, io);
+}
+
+/**
+ * Handles Admin Mobile specific setup
+ */
+async function handleAdminMobileSetup(
+  socket: Socket,
+  userInfo: { role: 'authenticated' | 'none'; documentId: string },
+  strapi: Core.Strapi
+): Promise<void> {
+  // Update user connection status
+  await mapUserToSocket(socket, userInfo);
 }
 
 
@@ -242,24 +332,25 @@ async function handleDisconnection(
   strapi: Core.Strapi,
   io: SocketIOServer
 ): Promise<void> {
-  strapi.log.info(`[ConnectionHandler] Socket disconnected: ${socket.id}`);
+  const socketData = socket.data as SocketData;
+  const clientTypeName = socketData?.clientType ? getClientTypeName(socketData.clientType) : 'Unknown';
+  
+  strapi.log.info(`[ConnectionHandler] ${clientTypeName} disconnected: ${socket.id}`);
 
   try {
-    // Get user info from socket data
-    const { documentId, clientType, keySeatDocumentId } = socket.data || {};
+    const { documentId, clientType, keySeatDocumentId } = socketData || {};
 
-    if (!documentId) {
+    if (!documentId || !clientType) {
       return;
     }
 
-    // Clear socket ID based on client type
-    if (clientType === 'pos' && keySeatDocumentId) {
-      // Clear key-seat socket ID for POS clients
+    // Handle disconnection based on client type
+    if (clientType === SocketClientType.POS_DESKTOP && keySeatDocumentId) {
       await clearKeySeatSocketId(keySeatDocumentId, socket.id, strapi);
-    } else if (clientType === 'mobile') {
-      // Clear user socket ID for mobile clients
+    } else if (clientType === SocketClientType.ADMIN_MOBILE) {
       await clearUserSocketId(documentId, strapi, io);
     }
+    // Customer clients don't need cleanup (handled in customer-app.handler)
   } catch (error) {
     strapi.log.error(`[ConnectionHandler] Error handling disconnection: ${error}`);
   }

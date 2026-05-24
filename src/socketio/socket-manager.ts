@@ -6,6 +6,7 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import type { Core } from '@strapi/strapi';
 import { socketEventManager } from './socket-io-manager';
+import { SocketClientType } from './types/client-types';
 
 export class MultiReplicaSocketManager {
   private static instance: MultiReplicaSocketManager;
@@ -31,7 +32,7 @@ export class MultiReplicaSocketManager {
     userDocumentId: string,
     eventName: string,
     data: T,
-    clientType?: 'mobile' | 'pos'
+    clientType?: SocketClientType
   ): Promise<boolean> {
     try {
       // Use room-based emission for cross-replica communication
@@ -106,40 +107,45 @@ export class MultiReplicaSocketManager {
       // Join user-specific room
       const userRoom = `user:${documentId}`;
       await socket.join(userRoom);
-      this.strapi.log.debug(`[SocketManager] Socket ${socket.id} joined room ${userRoom}`);
+      this.strapi.log.info(`[SocketManager] Socket ${socket.id} joined room ${userRoom}`);
 
       // Join client-type specific room
       if (clientType) {
         const clientRoom = `${userRoom}:${clientType}`;
         await socket.join(clientRoom);
-        this.strapi.log.debug(`[SocketManager] Socket ${socket.id} joined room ${clientRoom}`);
+        this.strapi.log.info(`[SocketManager] Socket ${socket.id} joined room ${clientRoom}`);
       }
 
-      // For mobile clients, join seats subscription room
-      if (clientType === 'mobile') {
+      // For admin mobile clients, join seats subscription room
+      if (clientType === SocketClientType.ADMIN_MOBILE) {
         const seatsRoom = `user:${documentId}:seats`;
         await socket.join(seatsRoom);
-        this.strapi.log.debug(`[SocketManager] Socket ${socket.id} joined seats room ${seatsRoom}`);
+        this.strapi.log.info(`[SocketManager] Socket ${socket.id} joined seats room ${seatsRoom}`);
         
         // Also join a mobile-specific room for direct messaging
         const mobileRoom = `mobile:${socket.id}`;
         await socket.join(mobileRoom);
-        this.strapi.log.debug(`[SocketManager] Socket ${socket.id} joined mobile room ${mobileRoom}`);
+        this.strapi.log.info(`[SocketManager] Socket ${socket.id} joined mobile room ${mobileRoom}`);
       }
 
       // For POS clients, join additional rooms
-      if (clientType === 'pos' && keySeatDocumentId) {
-        // Join POS-specific room
+      if (clientType === SocketClientType.POS_DESKTOP && keySeatDocumentId) {
+        // Join POS-specific room (CRITICAL for customer requests)
         const posRoom = `pos:${keySeatDocumentId}`;
         await socket.join(posRoom);
-        this.strapi.log.debug(`[SocketManager] Socket ${socket.id} joined POS room ${posRoom}`);
+        this.strapi.log.info(`[SocketManager] Socket ${socket.id} joined POS room ${posRoom}`);
+
+        // Join seat-specific room for broadcasts
+        const seatRoom = `seat:${keySeatDocumentId}`;
+        await socket.join(seatRoom);
+        this.strapi.log.info(`[SocketManager] Socket ${socket.id} joined seat room ${seatRoom}`);
 
         // Join license room (for license-wide broadcasts)
         const licenseDocumentId = await this.getLicenseForKeySeat(keySeatDocumentId);
         if (licenseDocumentId) {
           const licenseRoom = `license:${licenseDocumentId}`;
           await socket.join(licenseRoom);
-          this.strapi.log.debug(`[SocketManager] Socket ${socket.id} joined license room ${licenseRoom}`);
+          this.strapi.log.info(`[SocketManager] Socket ${socket.id} joined license room ${licenseRoom}`);
         }
       }
     } catch (error) {
@@ -161,13 +167,14 @@ export class MultiReplicaSocketManager {
         `user:${documentId}:${clientType}`,
       ];
 
-      if (clientType === 'mobile') {
+      if (clientType === SocketClientType.ADMIN_MOBILE) {
         rooms.push(`user:${documentId}:seats`);
         rooms.push(`mobile:${socket.id}`);
       }
 
-      if (clientType === 'pos' && keySeatDocumentId) {
+      if (clientType === SocketClientType.POS_DESKTOP && keySeatDocumentId) {
         rooms.push(`pos:${keySeatDocumentId}`);
+        rooms.push(`seat:${keySeatDocumentId}`);
         
         const licenseDocumentId = await this.getLicenseForKeySeat(keySeatDocumentId);
         if (licenseDocumentId) {
@@ -225,7 +232,7 @@ export class MultiReplicaSocketManager {
   /**
    * Check if user is connected (in any replica)
    */
-  public async isUserConnected(userDocumentId: string, clientType?: 'mobile' | 'pos'): Promise<boolean> {
+  public async isUserConnected(userDocumentId: string, clientType?: SocketClientType): Promise<boolean> {
     try {
       const roomName = clientType ? `user:${userDocumentId}:${clientType}` : `user:${userDocumentId}`;
       const count = await this.getRoomSocketCount(roomName);

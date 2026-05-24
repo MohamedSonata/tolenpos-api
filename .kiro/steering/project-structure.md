@@ -30,6 +30,8 @@ src/
 │   └── routes/
 ├── socketio/                     # Real-time communication
 │   ├── handlers/                 # Event handlers
+│   ├── types/
+│   │   └── client-types.ts       # Socket client type enum & utilities
 │   ├── events_constants.ts       # Socket event names
 │   └── redis-adapter.ts          # Multi-replica support
 ├── cron/
@@ -44,6 +46,24 @@ config/
 ```
 
 ## Code Patterns
+
+### Socket Client Types (Strongly Typed)
+```typescript
+// Use SocketClientType enum for type safety
+import { SocketClientType } from '../types/client-types';
+
+// Client types:
+// - SocketClientType.POS_DESKTOP: Main POS desktop application
+// - SocketClientType.ADMIN_MOBILE: Admin mobile app for license management
+// - SocketClientType.CUSTOMER_MOBILE: Customer mobile app for scanning/browsing
+// - SocketClientType.CUSTOMER_WEB: Customer web app for scanning/browsing
+
+// Helper functions available:
+// - requiresAuthentication(clientType): Check if auth required
+// - isCustomerClient(clientType): Check if customer-facing app
+// - getClientTypeName(clientType): Get human-readable name
+// - mapLegacyClientType(oldType): Convert legacy strings (backward compatibility)
+```
 
 ### Document Service API (Strapi v5)
 ```typescript
@@ -109,7 +129,7 @@ socket.emit(SocketIOEvents.OnSeatUpdate, payload);
 ## Socket.IO Event Flow
 
 ```
-POS App                          Backend                    Mobile App
+POS Desktop App                  Backend                    Admin Mobile App
   │                                │                            │
   │──seat:update (telemetry)──────►│                            │
   │◄─seat:update:success──────────│                            │
@@ -117,7 +137,29 @@ POS App                          Backend                    Mobile App
   │                                │                            │
   │                                │◄─seat:subscribe────────────│
   │                                │──seat:subscribe:success───►│
+
+Customer Mobile/Web              Backend                    POS Desktop App
+  │                                │                            │
+  │──customer:connect──────────────►│                            │
+  │◄─customer:connect:success──────│                            │
+  │                                │──customer:connected────────►│
+  │──customer:menu:request─────────►│                            │
+  │                                │──customer:menu:request─────►│
+  │◄─customer:menu:response────────│◄─pos:menu:response─────────│
 ```
+
+## Socket Client Type System
+
+All Socket.IO connections use strongly-typed client identification:
+
+| Client Type | Enum Value | Authentication | Purpose |
+|-------------|------------|----------------|---------|
+| POS Desktop | `POS_DESKTOP` | Required (API key + machineUUID) | Main point of sale system |
+| Admin Mobile | `ADMIN_MOBILE` | Required (JWT) | License/seat management |
+| Customer Mobile | `CUSTOMER_MOBILE` | Not required | Product scanning/browsing |
+| Customer Web | `CUSTOMER_WEB` | Not required | Product scanning/browsing |
+
+**Legacy Support**: Old client type strings (`"pos"`, `"mobile"`, `"customer"`, `"Website"`) are automatically mapped to new enum values for backward compatibility.
 
 ## Docker Swarm Notes
 

@@ -17,6 +17,7 @@
 import { Server, Socket } from "socket.io";
 import { SocketIOEvents } from "./events_constants";
 import { SocketEventAction } from "./interfaces";
+import { SocketClientType } from "./types/client-types";
 
 // ================================
 // TYPES AND INTERFACES
@@ -296,14 +297,16 @@ export class SocketEventManager {
    * Checks if a socket is authenticated as a POS client
    */
   public isPOSClient(socket: Socket): boolean {
-    return (socket as any).clientType === 'pos';
+    const clientType = (socket as any).clientType || socket.data?.clientType;
+    return clientType === SocketClientType.POS_DESKTOP || clientType === 'pos'; // Support legacy
   }
 
   /**
    * Checks if a socket is authenticated as a mobile client
    */
   public isMobileClient(socket: Socket): boolean {
-    return (socket as any).clientType === 'mobile';
+    const clientType = (socket as any).clientType || socket.data?.clientType;
+    return clientType === SocketClientType.ADMIN_MOBILE || clientType === 'mobile'; // Support legacy
   }
 
   /**
@@ -316,8 +319,8 @@ export class SocketEventManager {
   /**
    * Gets the client type from a socket
    */
-  public getClientType(socket: Socket): 'mobile' | 'pos' | undefined {
-    return (socket as any).clientType;
+  public getClientType(socket: Socket): SocketClientType | undefined {
+    return (socket as any).clientType || socket.data?.clientType;
   }
 
   // ================================

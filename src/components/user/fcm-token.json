@@ -19,8 +19,12 @@
     },
     "platform": {
       "type": "enumeration",
-      "enum": ["ios", "android", "web"],
-      "required": true
+      "required": true,
+      "enum": [
+        "ios",
+        "android",
+        "web"
+      ]
     },
     "lastUpdatedAt": {
       "type": "datetime"
@@ -28,6 +32,9 @@
     "isActive": {
       "type": "boolean",
       "default": true
+    },
+    "socketId": {
+      "type": "string"
     }
   },
   "config": {}

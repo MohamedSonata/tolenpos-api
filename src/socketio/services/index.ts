@@ -9,12 +9,13 @@ import { Core } from "@strapi/strapi";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { Socket } from "socket.io";
 import { SocketIOErrorEvents } from '../error_events.constants';
+import { SocketClientType } from '../types/client-types';
 
 // Extend only with custom properties, do not override handshake
 interface AuthenticatedSocket extends Socket {
   userID?: string;
   strategeyName?: string;
-  clientType?: 'mobile' | 'pos';
+  clientType?: SocketClientType;
   machineUUID?: string;
   keySeatDocumentId?: string;
   // handshake is inherited from Socket
@@ -111,7 +112,7 @@ const socketService = ({ strapi }: { strapi: Core.Strapi }) => {
       // Authentication successful - set socket properties
       socket.userID = userDocumentId;
       socket.strategeyName = "pos-api-key";
-      socket.clientType = "pos";
+      socket.clientType = SocketClientType.POS_DESKTOP;
       socket.machineUUID = machineUUID;
       socket.keySeatDocumentId = keySeat.documentId; // Store for easy access
 
@@ -185,7 +186,7 @@ const socketService = ({ strapi }: { strapi: Core.Strapi }) => {
           if (socket.userID) {
             // Save the strategyName to the socket connection object
             socket.strategeyName = "users-permissions";
-            socket.clientType = "mobile";
+            socket.clientType = SocketClientType.ADMIN_MOBILE;
           }
           return true;
         }
