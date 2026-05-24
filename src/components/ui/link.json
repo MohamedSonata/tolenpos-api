@@ -1,0 +1,36 @@
+{
+  "collectionName": "components_ui_links",
+  "info": {
+    "displayName": "Link",
+    "description": "Reusable link component with text, URL, and target configuration"
+  },
+  "options": {},
+  "attributes": {
+    "text": {
+      "type": "string",
+      "required": true,
+      "maxLength": 100,
+      "description": "Link text displayed to users"
+    },
+    "url": {
+      "type": "string",
+      "required": true,
+      "description": "Target URL"
+    },
+    "openInNewTab": {
+      "type": "boolean",
+      "default": true,
+      "description": "Open link in new tab/window"
+    },
+    "icon": {
+      "type": "string",
+      "maxLength": 50,
+      "description": "Optional icon name or emoji"
+    },
+    "isExternal": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the link points to an external resource"
+    }
+  }
+}

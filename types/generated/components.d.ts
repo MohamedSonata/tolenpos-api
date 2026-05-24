@@ -326,6 +326,78 @@ export interface TelemetryRealtimeTelemetry extends Struct.ComponentSchema {
   };
 }
 
+export interface UiActionButton extends Struct.ComponentSchema {
+  collectionName: 'components_ui_action_buttons';
+  info: {
+    description: 'Reusable action button component with URL, style, and browser behavior configuration';
+    displayName: 'Action Button';
+  };
+  attributes: {
+    openInBrowser: Schema.Attribute.Boolean &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<true>;
+    style: Schema.Attribute.Enumeration<
+      ['primary', 'secondary', 'success', 'warning', 'danger']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'primary'>;
+    text: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 50;
+      }>;
+    url: Schema.Attribute.String & Schema.Attribute.Required;
+  };
+}
+
+export interface UiLink extends Struct.ComponentSchema {
+  collectionName: 'components_ui_links';
+  info: {
+    description: 'Reusable link component with text, URL, and target configuration';
+    displayName: 'Link';
+  };
+  attributes: {
+    icon: Schema.Attribute.String &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 50;
+      }>;
+    isExternal: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    openInNewTab: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    text: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 100;
+      }>;
+    url: Schema.Attribute.String & Schema.Attribute.Required;
+  };
+}
+
+export interface UiMediaAsset extends Struct.ComponentSchema {
+  collectionName: 'components_ui_media_assets';
+  info: {
+    description: 'Reusable media component for images, videos, or other media URLs with metadata';
+    displayName: 'Media Asset';
+  };
+  attributes: {
+    altText: Schema.Attribute.String &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 200;
+      }>;
+    caption: Schema.Attribute.Text;
+    duration: Schema.Attribute.Integer;
+    fileSize: Schema.Attribute.Integer;
+    height: Schema.Attribute.Integer;
+    thumbnailUrl: Schema.Attribute.String;
+    type: Schema.Attribute.Enumeration<
+      ['image', 'video', 'audio', 'document']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'image'>;
+    url: Schema.Attribute.String & Schema.Attribute.Required;
+    width: Schema.Attribute.Integer;
+  };
+}
+
 export interface UserFcmToken extends Struct.ComponentSchema {
   collectionName: 'components_user_fcm_tokens';
   info: {
@@ -358,6 +430,9 @@ declare module '@strapi/strapi' {
       'telemetry.order-item': TelemetryOrderItem;
       'telemetry.period-kpi': TelemetryPeriodKpi;
       'telemetry.realtime-telemetry': TelemetryRealtimeTelemetry;
+      'ui.action-button': UiActionButton;
+      'ui.link': UiLink;
+      'ui.media-asset': UiMediaAsset;
       'user.fcm-token': UserFcmToken;
     }
   }

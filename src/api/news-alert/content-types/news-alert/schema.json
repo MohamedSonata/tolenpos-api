@@ -1,0 +1,100 @@
+{
+  "kind": "collectionType",
+  "collectionName": "news_alerts",
+  "info": {
+    "singularName": "news-alert",
+    "pluralName": "news-alerts",
+    "displayName": "News Alert",
+    "description": "News alerts and announcements for POS applications"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true,
+      "maxLength": 200
+    },
+    "content": {
+      "type": "richtext",
+      "required": true
+    },
+    "priority": {
+      "type": "enumeration",
+      "enum": ["low", "medium", "high", "critical"],
+      "default": "medium",
+      "required": true
+    },
+    "category": {
+      "type": "enumeration",
+      "enum": ["feature", "maintenance", "security", "promotion", "announcement", "warning"],
+      "default": "announcement",
+      "required": true
+    },
+    "startDate": {
+      "type": "datetime",
+      "required": true
+    },
+    "endDate": {
+      "type": "datetime",
+      "required": false
+    },
+    "isActive": {
+      "type": "boolean",
+      "default": true,
+      "required": true
+    },
+    "targetAudience": {
+      "type": "enumeration",
+      "enum": ["all", "retail", "restaurant", "cafe", "grocery", "pharmacy", "bakery"],
+      "default": "all",
+      "required": true
+    },
+    "minVersion": {
+      "type": "string",
+      "required": false
+    },
+    "maxVersion": {
+      "type": "string",
+      "required": false
+    },
+    "actionButton": {
+      "type": "component",
+      "repeatable": false,
+      "component": "ui.action-button",
+      "required": false
+    },
+    "imageUrl": {
+      "type": "string",
+      "required": false
+    },
+    "videoUrl": {
+      "type": "string",
+      "required": false
+    },
+    "dismissible": {
+      "type": "boolean",
+      "default": true,
+      "required": true
+    },
+    "showOnce": {
+      "type": "boolean",
+      "default": false,
+      "required": true
+    },
+    "viewCount": {
+      "type": "integer",
+      "default": 0
+    },
+    "clickCount": {
+      "type": "integer",
+      "default": 0
+    },
+    "dismissCount": {
+      "type": "integer",
+      "default": 0
+    }
+  }
+}

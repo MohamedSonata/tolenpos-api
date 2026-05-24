@@ -679,6 +679,81 @@ export interface ApiMobLatestAppsReleaseMobLatestAppsRelease
   };
 }
 
+export interface ApiNewsAlertNewsAlert extends Struct.CollectionTypeSchema {
+  collectionName: 'news_alerts';
+  info: {
+    description: 'News alerts and announcements for POS applications';
+    displayName: 'News Alert';
+    pluralName: 'news-alerts';
+    singularName: 'news-alert';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    actionButton: Schema.Attribute.Component<'ui.action-button', false>;
+    category: Schema.Attribute.Enumeration<
+      [
+        'feature',
+        'maintenance',
+        'security',
+        'promotion',
+        'announcement',
+        'warning',
+      ]
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'announcement'>;
+    clickCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    content: Schema.Attribute.RichText & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    dismissCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    dismissible: Schema.Attribute.Boolean &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<true>;
+    endDate: Schema.Attribute.DateTime;
+    imageUrl: Schema.Attribute.String;
+    isActive: Schema.Attribute.Boolean &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<true>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::news-alert.news-alert'
+    > &
+      Schema.Attribute.Private;
+    maxVersion: Schema.Attribute.String;
+    minVersion: Schema.Attribute.String;
+    priority: Schema.Attribute.Enumeration<
+      ['low', 'medium', 'high', 'critical']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'medium'>;
+    publishedAt: Schema.Attribute.DateTime;
+    showOnce: Schema.Attribute.Boolean &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<false>;
+    startDate: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    targetAudience: Schema.Attribute.Enumeration<
+      ['all', 'retail', 'restaurant', 'cafe', 'grocery', 'pharmacy', 'bakery']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'all'>;
+    title: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 200;
+      }>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    videoUrl: Schema.Attribute.String;
+    viewCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+  };
+}
+
 export interface ApiOrderRequestOrderRequest
   extends Struct.CollectionTypeSchema {
   collectionName: 'order_requests';
@@ -1385,6 +1460,7 @@ declare module '@strapi/strapi' {
       'api::key-seat.key-seat': ApiKeySeatKeySeat;
       'api::license.license': ApiLicenseLicense;
       'api::mob-latest-apps-release.mob-latest-apps-release': ApiMobLatestAppsReleaseMobLatestAppsRelease;
+      'api::news-alert.news-alert': ApiNewsAlertNewsAlert;
       'api::order-request.order-request': ApiOrderRequestOrderRequest;
       'api::seat-telemetry-history.seat-telemetry-history': ApiSeatTelemetryHistorySeatTelemetryHistory;
       'api::subscription-plan.subscription-plan': ApiSubscriptionPlanSubscriptionPlan;

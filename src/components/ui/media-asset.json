@@ -1,0 +1,56 @@
+{
+  "collectionName": "components_ui_media_assets",
+  "info": {
+    "displayName": "Media Asset",
+    "description": "Reusable media component for images, videos, or other media URLs with metadata"
+  },
+  "options": {},
+  "attributes": {
+    "url": {
+      "type": "string",
+      "required": true,
+      "description": "URL of the media asset"
+    },
+    "type": {
+      "type": "enumeration",
+      "enum": [
+        "image",
+        "video",
+        "audio",
+        "document"
+      ],
+      "default": "image",
+      "required": true,
+      "description": "Type of media asset"
+    },
+    "altText": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Alternative text for accessibility"
+    },
+    "caption": {
+      "type": "text",
+      "description": "Optional caption or description"
+    },
+    "thumbnailUrl": {
+      "type": "string",
+      "description": "Thumbnail URL for videos or large images"
+    },
+    "width": {
+      "type": "integer",
+      "description": "Width in pixels"
+    },
+    "height": {
+      "type": "integer",
+      "description": "Height in pixels"
+    },
+    "fileSize": {
+      "type": "integer",
+      "description": "File size in bytes"
+    },
+    "duration": {
+      "type": "integer",
+      "description": "Duration in seconds (for video/audio)"
+    }
+  }
+}

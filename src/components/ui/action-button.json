@@ -1,0 +1,40 @@
+{
+  "collectionName": "components_ui_action_buttons",
+  "info": {
+    "displayName": "Action Button",
+    "description": "Reusable action button component with URL, style, and browser behavior configuration"
+  },
+  "options": {},
+  "attributes": {
+    "text": {
+      "type": "string",
+      "required": true,
+      "maxLength": 50,
+      "description": "Button text displayed to users"
+    },
+    "url": {
+      "type": "string",
+      "required": true,
+      "description": "Target URL to open when button is clicked"
+    },
+    "style": {
+      "type": "enumeration",
+      "enum": [
+        "primary",
+        "secondary",
+        "success",
+        "warning",
+        "danger"
+      ],
+      "default": "primary",
+      "required": true,
+      "description": "Visual style variant of the button"
+    },
+    "openInBrowser": {
+      "type": "boolean",
+      "default": true,
+      "required": true,
+      "description": "Whether to open URL in external browser (true) or in-app webview (false)"
+    }
+  }
+}
