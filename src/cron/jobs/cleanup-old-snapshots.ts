@@ -51,7 +51,7 @@ export async function executeCleanupJob(strapi: Core.Strapi): Promise<void> {
 
         strapi.log.info(`[CleanupJob] Found ${oldSnapshots.length} old snapshots to delete`);
 
-        // Delete in batches
+        // Delete in batches (sequentially to avoid concurrent query warning)
         const batchSize = 100;
         let deletedCount = 0;
         let failedCount = 0;
@@ -59,21 +59,21 @@ export async function executeCleanupJob(strapi: Core.Strapi): Promise<void> {
         for (let i = 0; i < oldSnapshots.length; i += batchSize) {
           const batch = oldSnapshots.slice(i, i + batchSize);
           
-          const results = await Promise.allSettled(
-            batch.map(snapshot => 
-              strapi.documents('api::seat-telemetry-history.seat-telemetry-history').delete({
+          // Process sequentially to avoid pg concurrent query warning
+          for (const snapshot of batch) {
+            try {
+              await strapi.documents('api::seat-telemetry-history.seat-telemetry-history').delete({
                 documentId: snapshot.documentId
-              })
-            )
-          );
-
-          results.forEach(result => {
-            if (result.status === 'fulfilled') {
+              });
               deletedCount++;
-            } else {
+            } catch (error) {
               failedCount++;
+              strapi.log.warn('[CleanupJob] Failed to delete snapshot:', {
+                documentId: snapshot.documentId,
+                error: error.message
+              });
             }
-          });
+          }
         }
 
         const duration = ((Date.now() - startTime) / 1000).toFixed(2);

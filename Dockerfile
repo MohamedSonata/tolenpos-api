@@ -1,14 +1,11 @@
 # Creating multi-stage build for production
 FROM node:22-alpine AS build
 RUN apk update && apk add --no-cache build-base gcc autoconf automake zlib-dev libpng-dev vips-dev git > /dev/null 2>&1
-ENV NODE_ENV=production
-ENV NODE_ENV=${NODE_ENV}
 
 WORKDIR /opt/
 COPY package.json yarn.lock* package-lock.json* ./
 RUN yarn config set network-timeout 600000 -g
-RUN yarn cache clean
-RUN yarn install --frozen-lockfile --production --no-cache
+RUN yarn install --frozen-lockfile
 
 ENV PATH=/opt/node_modules/.bin:$PATH
 WORKDIR /opt/app
@@ -19,7 +16,6 @@ RUN yarn build
 FROM node:22-alpine
 RUN apk add --no-cache vips-dev
 ENV NODE_ENV=production
-ENV NODE_ENV=${NODE_ENV}
 
 WORKDIR /opt/
 COPY --from=build /opt/node_modules ./node_modules

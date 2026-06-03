@@ -695,8 +695,8 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
       for (let i = 0; i < seats.length; i += batchSize) {
         const batch = seats.slice(i, i + batchSize);
         
-        await Promise.allSettled(
-          batch.map(async (seat) => {
+                // Process sequentially to avoid pg concurrent query warning
+        for (const seat of batch)  {
             try {
               summary.timezoneChecked++;
 
@@ -798,8 +798,7 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
               summary.errors.push(errorDetails);
               strapi.log.error(`[KeySeatService] Failed to create snapshot for seat ${seat.documentId}:`, errorDetails);
             }
-          })
-        );
+          }
       }
 
       strapi.log.info('[KeySeatService] Timezone-aware daily snapshots completed:', {

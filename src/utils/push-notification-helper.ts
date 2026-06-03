@@ -153,18 +153,33 @@ export async function sendPushNotificationToMultipleUsers(
   totalSent: number;
   totalFailed: number;
 }> {
-  const results = await Promise.allSettled(
-    userDocumentIds.map(userId => 
-      sendPushNotificationToUser(strapi, userId, payload)
-    )
-  );
+  // Process sequentially to avoid pg concurrent query warning
+  const results: Array<{
+    success: boolean;
+    sentCount: number;
+    failedCount: number;
+    errors: any[];
+  }> = [];
+
+  for (const userId of userDocumentIds) {
+    try {
+      const result = await sendPushNotificationToUser(strapi, userId, payload);
+      results.push(result);
+    } catch (error) {
+      strapi.log.error(`[PushNotification] Error sending to user ${userId}:`, error);
+      results.push({
+        success: false,
+        sentCount: 0,
+        failedCount: 1,
+        errors: [error.message]
+      });
+    }
+  }
 
   const summary = results.reduce(
     (acc, result) => {
-      if (result.status === 'fulfilled') {
-        acc.totalSent += result.value.sentCount;
-        acc.totalFailed += result.value.failedCount;
-      }
+      acc.totalSent += result.sentCount;
+      acc.totalFailed += result.failedCount;
       return acc;
     },
     { totalUsers: userDocumentIds.length, totalSent: 0, totalFailed: 0 }
