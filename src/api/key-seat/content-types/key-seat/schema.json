@@ -57,8 +57,8 @@
     },
     "publicSeatId": {
       "type": "string",
-      "unique": true,
-      "required": false
+      "required": false,
+      "unique": true
     },
     "businessName": {
       "type": "string",
@@ -66,8 +66,14 @@
     },
     "businessType": {
       "type": "enumeration",
-      "enum": ["restaurant", "retail", "cafe", "pharmacy", "other"],
-      "default": "retail"
+      "default": "retail",
+      "enum": [
+        "restaurant",
+        "retail",
+        "cafe",
+        "pharmacy",
+        "other"
+      ]
     },
     "allowCustomerApp": {
       "type": "boolean",
@@ -96,6 +102,11 @@
     "customerFcmTokens": {
       "type": "component",
       "component": "user.fcm-token",
+      "repeatable": true
+    },
+    "refundRecords": {
+      "type": "component",
+      "component": "telemetry.refund-order-audit",
       "repeatable": true
     }
   }

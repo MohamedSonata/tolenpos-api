@@ -22,9 +22,9 @@
       "type": "component",
       "component": "telemetry.realtime-telemetry",
       "repeatable": false
-    }, 
+    },
     "historicalKpiSummary": {
-     "type": "component",
+      "type": "component",
       "component": "telemetry.period-kpi",
       "repeatable": false
     },
@@ -41,6 +41,11 @@
         "hourly",
         "daily"
       ]
+    },
+    "refundedRecords": {
+      "type": "component",
+      "component": "telemetry.refund-order-audit",
+      "repeatable": true
     }
   }
 }

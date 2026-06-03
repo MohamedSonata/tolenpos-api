@@ -170,6 +170,20 @@ export interface TelemetryHistoricalKpiSummary extends Struct.ComponentSchema {
   };
 }
 
+export interface TelemetryItemsRefunded extends Struct.ComponentSchema {
+  collectionName: 'components_telemetry_items_refundeds';
+  info: {
+    displayName: 'itemsRefunded';
+  };
+  attributes: {
+    productId: Schema.Attribute.String;
+    productName: Schema.Attribute.String;
+    quantity: Schema.Attribute.Integer;
+    totalPrice: Schema.Attribute.Decimal;
+    unitPrice: Schema.Attribute.Decimal;
+  };
+}
+
 export interface TelemetryKpiSummary extends Struct.ComponentSchema {
   collectionName: 'components_telemetry_kpi_summaries';
   info: {
@@ -326,6 +340,34 @@ export interface TelemetryRealtimeTelemetry extends Struct.ComponentSchema {
   };
 }
 
+export interface TelemetryRefundOrderAudit extends Struct.ComponentSchema {
+  collectionName: 'components_telemetry_refund_order_audits';
+  info: {
+    displayName: 'RefundOrderAudit';
+  };
+  attributes: {
+    approvedByRole: Schema.Attribute.Enumeration<['admin', 'manager']>;
+    approvedByUserId: Schema.Attribute.String;
+    approvedByUsername: Schema.Attribute.String;
+    hoursSinceOriginalSale: Schema.Attribute.Decimal;
+    itemsRefunded: Schema.Attribute.Component<'telemetry.items-refunded', true>;
+    managerPin: Schema.Attribute.String;
+    originalReceiptNumber: Schema.Attribute.String;
+    reason: Schema.Attribute.String;
+    refundAmount: Schema.Attribute.Decimal;
+    refundTimestamp: Schema.Attribute.DateTime;
+    refundType: Schema.Attribute.Enumeration<['full', 'partial']>;
+    requestedAt: Schema.Attribute.DateTime;
+    requestedByRole: Schema.Attribute.String;
+    requestedByUserId: Schema.Attribute.String;
+    requestedByUsername: Schema.Attribute.String;
+    status: Schema.Attribute.Enumeration<['pending', 'approved', 'rejected']> &
+      Schema.Attribute.DefaultTo<'pending'>;
+    terminalId: Schema.Attribute.String;
+    transactionId: Schema.Attribute.String;
+  };
+}
+
 export interface UiActionButton extends Struct.ComponentSchema {
   collectionName: 'components_ui_action_buttons';
   info: {
@@ -425,11 +467,13 @@ declare module '@strapi/strapi' {
       'telemetry.category-performance': TelemetryCategoryPerformance;
       'telemetry.expense': TelemetryExpense;
       'telemetry.historical-kpi-summary': TelemetryHistoricalKpiSummary;
+      'telemetry.items-refunded': TelemetryItemsRefunded;
       'telemetry.kpi-summary': TelemetryKpiSummary;
       'telemetry.last-order': TelemetryLastOrder;
       'telemetry.order-item': TelemetryOrderItem;
       'telemetry.period-kpi': TelemetryPeriodKpi;
       'telemetry.realtime-telemetry': TelemetryRealtimeTelemetry;
+      'telemetry.refund-order-audit': TelemetryRefundOrderAudit;
       'ui.action-button': UiActionButton;
       'ui.link': UiLink;
       'ui.media-asset': UiMediaAsset;

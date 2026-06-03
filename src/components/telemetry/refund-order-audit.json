@@ -1,0 +1,80 @@
+{
+  "collectionName": "components_telemetry_refund_order_audits",
+  "info": {
+    "displayName": "RefundOrderAudit"
+  },
+  "options": {},
+  "attributes": {
+    "originalReceiptNumber": {
+      "type": "string"
+    },
+    "transactionId": {
+      "type": "string"
+    },
+    "refundType": {
+      "type": "enumeration",
+      "enum": [
+        "full",
+        "partial"
+      ]
+    },
+    "refundAmount": {
+      "type": "decimal"
+    },
+    "requestedByUserId": {
+      "type": "string"
+    },
+    "requestedByUsername": {
+      "type": "string"
+    },
+    "requestedByRole": {
+      "type": "string"
+    },
+    "approvedByUserId": {
+      "type": "string"
+    },
+    "approvedByUsername": {
+      "type": "string"
+    },
+    "approvedByRole": {
+      "type": "enumeration",
+      "enum": [
+        "admin",
+        "manager"
+      ]
+    },
+    "managerPin": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "refundTimestamp": {
+      "type": "datetime"
+    },
+    "terminalId": {
+      "type": "string"
+    },
+    "hoursSinceOriginalSale": {
+      "type": "decimal"
+    },
+    "itemsRefunded": {
+      "type": "component",
+      "component": "telemetry.items-refunded",
+      "repeatable": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected"
+      ],
+      "default": "pending"
+    },
+    "requestedAt": {
+      "type": "datetime"
+    }
+  },
+  "config": {}
+}

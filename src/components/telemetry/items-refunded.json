@@ -1,0 +1,25 @@
+{
+  "collectionName": "components_telemetry_items_refundeds",
+  "info": {
+    "displayName": "itemsRefunded"
+  },
+  "options": {},
+  "attributes": {
+    "productId": {
+      "type": "string"
+    },
+    "productName": {
+      "type": "string"
+    },
+    "quantity": {
+      "type": "integer"
+    },
+    "unitPrice": {
+      "type": "decimal"
+    },
+    "totalPrice": {
+      "type": "decimal"
+    }
+  },
+  "config": {}
+}

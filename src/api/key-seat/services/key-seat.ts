@@ -241,14 +241,17 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
    * Creates a historical telemetry snapshot
    * @param keySeatDocumentId - Document ID of the key-seat
    * @param telemetryData - Telemetry data to snapshot
+   * @param historicalKpiSummary - Historical KPI summary data
    * @param snapshotType - Type of snapshot (realtime, hourly, daily)
+   * @param refundRecords - Array of refund records to include in snapshot
    * @returns Created snapshot document
    */
   async createTelemetrySnapshot(
     keySeatDocumentId: string,
     telemetryData: any,
     historicalKpiSummary: any,
-    snapshotType: 'realtime' | 'hourly' | 'daily' = 'realtime'
+    snapshotType: 'realtime' | 'hourly' | 'daily' = 'realtime',
+    refundRecords: any[] = []
   ) {
     try {
       strapi.log.info('[KeySeatService] Creating telemetry snapshot:', {
@@ -256,6 +259,7 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
         snapshotType,
         hasTelemetryData: !!telemetryData,
         hasHistoricalKpi: !!historicalKpiSummary,
+        refundRecordsCount: refundRecords?.length || 0,
         telemetryDataKeys: telemetryData ? Object.keys(telemetryData) : [],
         historicalKpiKeys: historicalKpiSummary ? Object.keys(historicalKpiSummary) : []
       });
@@ -284,6 +288,14 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
         strapi.log.info('[KeySeatService] Cleaned historicalKpiSummary:', {
           originalKeys: Object.keys(historicalKpiSummary),
           cleanedKeys: Object.keys(snapshotData.historicalKpiSummary)
+        });
+      }
+
+      // Clean and add refundRecords if they exist
+      if (Array.isArray(refundRecords) && refundRecords.length > 0) {
+        snapshotData.refundedRecords = refundRecords.map(record => this.removeComponentIds(record));
+        strapi.log.info('[KeySeatService] Added refund records to snapshot:', {
+          count: snapshotData.refundedRecords.length
         });
       }
 
@@ -655,7 +667,7 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
           }
         },
         populate:{
-                  realtimeTelemetry: {
+          realtimeTelemetry: {
             populate: {
               kpiSummary: true,
               lastOrder: {
@@ -668,16 +680,16 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
           },
           historicalKpiSummary: {
             populate: {
-
-           
-                yesterday: {
+              yesterday: {
                 populate: {
                   categories: true
                 }
-              },
-            
-           
-           
+              }
+            }
+          },
+          refundRecords: {
+            populate: {
+              itemsRefunded: true
             }
           }
         },
@@ -759,11 +771,15 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
                   ? seat.historicalKpiSummary.yesterday as Record<string, any>
                   : {};
 
+                // Get refund records for this seat (all refunds recorded today)
+                const refundRecords = Array.isArray(seat.refundRecords) ? seat.refundRecords : [];
+
                 strapi.log.info(`[KeySeatService] Preparing snapshot data for seat ${seat.documentId}:`, {
                   telemetryDataType: typeof telemetryData,
                   telemetryDataKeys: Object.keys(telemetryData),
                   historicalKpiType: typeof historicalKpi,
                   historicalKpiKeys: Object.keys(historicalKpi),
+                  refundRecordsCount: refundRecords.length,
                   snapshotLocalTime: localTime.toISOString(),
                   snapshotTimezone: seatTimezone
                 });
@@ -772,7 +788,8 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
                   seat.documentId,
                   telemetryData,
                   historicalKpi,
-                  'daily'
+                  'daily',
+                  refundRecords
                 );
                 
                 summary.success++;
@@ -1732,5 +1749,213 @@ export default factories.createCoreService('api::key-seat.key-seat', ({ strapi }
     }
 
     return categoryTotals;
+  },
+
+  /**
+   * Adds a refund record to seat's refundRecords array and sends notification to license owner
+   * @param seatDocumentId - Document ID of the seat
+   * @param refundData - Complete refund record data from POS client
+   * @param licenseOwner - License owner user object
+   * @returns Result object with success status and notification details
+   */
+  async addRefundRecord(
+    seatDocumentId: string,
+    refundData: any,
+    licenseOwner: any
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    refundRecordId?: string;
+    notificationSent?: boolean;
+    sentToDevices?: number;
+  }> {
+    try {
+      // Import push notification helper
+      const { sendPushNotificationToUser } = await import('../../../utils/push-notification-helper');
+
+      // Fetch current seat with existing refundRecords
+      const seat = await strapi.documents('api::key-seat.key-seat').findOne({
+        documentId: seatDocumentId,
+        populate: ['refundRecords']
+      });
+
+      if (!seat) {
+        return {
+          success: false,
+          error: 'Seat not found'
+        };
+      }
+
+      // Flexible field mapping - support multiple field name variations
+      const originalReceiptNumber = refundData.originalReceiptNumber || refundData.receiptNumber || '';
+      const transactionId = refundData.transactionId || '';
+      const refundType = refundData.refundType || 'full';
+      const reason = refundData.reason || '';
+      const refundTimestamp = refundData.refundTimestamp || new Date().toISOString();
+      const terminalId = refundData.terminalId || 'UNKNOWN';
+      
+      const refundedByUserId = refundData.refundedByUserId || refundData.requestedByUserId || '';
+      const refundedByUsername = refundData.refundedByUsername || refundData.requestedByUsername || 'Unknown';
+      const refundedByRole = refundData.refundedByRole || refundData.requestedByRole || 'CASHIER';
+
+      // Parse and clean refund amount - handle NaN and multiple possible field names
+      let parsedRefundAmount = 0;
+      const rawAmount = refundData.refundAmount;
+      
+      if (typeof rawAmount === 'number' && !isNaN(rawAmount)) {
+        parsedRefundAmount = rawAmount;
+      } else if (typeof rawAmount === 'string') {
+        parsedRefundAmount = parseFloat(rawAmount);
+      }
+
+      if (isNaN(parsedRefundAmount) || parsedRefundAmount <= 0) {
+        strapi.log.error('[KeySeatService] Invalid refund amount', {
+          seatDocumentId,
+          rawAmount,
+          rawAmountType: typeof rawAmount
+        });
+        return {
+          success: false,
+          error: `Invalid refund amount: ${rawAmount}`
+        };
+      }
+
+      // Parse hoursSinceOriginalSale - handle NaN and multiple possible field names
+      let parsedHours = 0;
+      const rawHours = refundData.hoursSinceOriginalSale || refundData.hoursElapsed || 0;
+      
+      if (typeof rawHours === 'number' && !isNaN(rawHours)) {
+        parsedHours = rawHours;
+      } else if (rawHours) {
+        parsedHours = parseFloat(rawHours);
+        if (isNaN(parsedHours)) {
+          parsedHours = 0;
+        }
+      }
+
+      // Prepare new refund record with correct field mapping
+      const newRefundRecord: any = {
+        originalReceiptNumber,
+        transactionId,
+        refundType: (refundType === 'full' || refundType === 'partial') ? refundType : 'full',
+        refundAmount: parsedRefundAmount,
+        requestedByUserId: refundedByUserId,
+        requestedByUsername: refundedByUsername,
+        requestedByRole: refundedByRole,
+        reason,
+        refundTimestamp,
+        terminalId,
+        hoursSinceOriginalSale: parsedHours,
+        status: 'pending' as const,
+        requestedAt: new Date().toISOString(),
+        itemsRefunded: Array.isArray(refundData.itemsRefunded)
+          ? refundData.itemsRefunded.map((item: any) => {
+              const qty = parseInt(item.quantity);
+              const unitPrice = parseFloat(item.unitPrice);
+              const totalPrice = parseFloat(item.totalPrice);
+              return {
+                productId: item.productId || '',
+                productName: item.productName || '',
+                quantity: isNaN(qty) ? 0 : qty,
+                unitPrice: isNaN(unitPrice) ? 0 : unitPrice,
+                totalPrice: isNaN(totalPrice) ? 0 : totalPrice
+              };
+            })
+          : []
+      };
+
+      // Append to existing refundRecords (or create new array if empty)
+      const existingRecords = seat.refundRecords || [];
+      const updatedRecords = [...existingRecords, newRefundRecord];
+
+      // Update seat with new refund record
+      await strapi.documents('api::key-seat.key-seat').update({
+        documentId: seatDocumentId,
+        data: {
+          refundRecords: updatedRecords
+        },
+        status: 'published'
+      });
+
+      strapi.log.info('[KeySeatService] Refund record added', {
+        seatDocumentId,
+        receiptNumber: originalReceiptNumber,
+        amount: parsedRefundAmount,
+        refundType,
+        totalRecords: updatedRecords.length
+      });
+
+      // Prepare notification payload
+      const itemsList = newRefundRecord.itemsRefunded
+        .map((item: any) => `${item.quantity}x ${item.productName}`)
+        .join(', ') || 'No items';
+
+      const notificationPayload = {
+        title: '🔐 Refund Requested',
+        body: `Refund: $${parsedRefundAmount.toFixed(2)} | Receipt #${originalReceiptNumber} | By: ${refundedByUsername}`,
+        data: {
+          type: 'refund_audit',
+          refundAmount: parsedRefundAmount.toString(),
+          receiptNumber: originalReceiptNumber,
+          transactionId,
+          requestedBy: refundedByUsername,
+          requestedByRole: refundedByRole,
+          reason,
+          items: itemsList,
+          seatDocumentId,
+          terminalId,
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      // Send push notification to license owner
+      let notificationResult = {
+        success: false,
+        sentCount: 0
+      };
+
+      try {
+        const licenseOwnerDocumentId = typeof licenseOwner === 'object' 
+          ? licenseOwner.documentId 
+          : licenseOwner;
+
+        notificationResult = await sendPushNotificationToUser(
+          strapi,
+          licenseOwnerDocumentId,
+          notificationPayload
+        );
+
+        if (notificationResult.success) {
+          strapi.log.info('[KeySeatService] Refund notification sent', {
+            seatDocumentId,
+            sentToDevices: notificationResult.sentCount
+          });
+        }
+      } catch (notifError) {
+        strapi.log.warn('[KeySeatService] Refund notification failed', {
+          seatDocumentId,
+          error: notifError.message
+        });
+        // Don't fail the entire operation if notification fails
+      }
+
+      return {
+        success: true,
+        refundRecordId: updatedRecords.length.toString(),
+        notificationSent: notificationResult.success,
+        sentToDevices: notificationResult.sentCount
+      };
+
+    } catch (error) {
+      strapi.log.error('[KeySeatService] Error adding refund record:', {
+        seatDocumentId,
+        error: error.message
+      });
+
+      return {
+        success: false,
+        error: error.message
+      };
+    }
   }
 }));

@@ -616,5 +616,93 @@ export default factories.createCoreController('api::key-seat.key-seat', ({ strap
         timestamp: new Date().toISOString()
       });
     }
+  },
+
+  /**
+   * POST /api/key-seats/:documentId/refunds
+   * Adds a refund record to the seat's refundRecords array and notifies license owner
+   * 
+   * Request body:
+   * {
+   *   originalReceiptNumber: string,
+   *   transactionId: string,
+   *   refundType: "full" | "partial",
+   *   refundAmount: number,
+   *   requestedByUserId: number,
+   *   requestedByUsername: string,
+   *   managerPin: string (6 digits),
+   *   reason: string,
+   *   terminalId: string,
+   *   hoursSinceOriginalSale: number,
+   *   itemsRefunded: Array<{productId, productName, quantity, unitPrice, totalPrice}>
+   * }
+   */
+  async addRefundRecord(ctx) {
+    try {
+      const { documentId } = ctx.params;
+      const rawBody = ctx.request.body;
+
+      // Unwrap data if it's wrapped in a "data" object
+      const refundData = rawBody?.data || rawBody;
+
+      if (!refundData) {
+        return ctx.badRequest('Request body is empty or invalid');
+      }
+
+      // Validate refundAmount exists
+      if (!refundData.refundAmount || refundData.refundAmount <= 0) {
+        return ctx.badRequest('Invalid or missing refundAmount');
+      }
+
+      // Fetch seat and validate ownership
+      const seat = await strapi.documents('api::key-seat.key-seat').findOne({
+        documentId,
+        populate: {
+          license: {
+            populate: {
+              user: true
+            }
+          },
+          refundRecords: true
+        }
+      });
+
+      if (!seat || !seat.license) {
+        return ctx.notFound('Seat not found');
+      }
+
+      // Add refund record via service
+      const service = strapi.service('api::key-seat.key-seat');
+      const result = await service.addRefundRecord(
+        documentId,
+        refundData,
+        seat.license.user
+      );
+
+      if (!result.success) {
+        strapi.log.error('[KeySeatController] Refund record failed', {
+          seatDocumentId: documentId,
+          error: result.error
+        });
+        return ctx.badRequest(result.error || 'Failed to add refund record');
+      }
+
+      return ctx.send({
+        success: true,
+        message: 'Refund record added successfully',
+        data: {
+          refundRecordId: result.refundRecordId,
+          notificationSent: result.notificationSent,
+          sentToDevices: result.sentToDevices
+        }
+      });
+
+    } catch (error) {
+      strapi.log.error('[KeySeatController] Error adding refund record:', {
+        error: error.message,
+        stack: error.stack
+      });
+      return ctx.internalServerError('Failed to add refund record');
+    }
   }
 }));

@@ -77,5 +77,14 @@ export default {
         middlewares: [],
       },
     },
+    {
+      method: 'POST',
+      path: '/key-seats/:documentId/refunds',
+      handler: 'key-seat.addRefundRecord',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 };

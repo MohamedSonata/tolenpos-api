@@ -21,7 +21,7 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Plugin =>
     config: {
       jwtManagement: 'refresh',
       sessions: {
-        accessTokenLifespan: 2592000, // 30 days
+        accessTokenLifespan: 15552000, // 180 days
         maxRefreshTokenLifespan: 31536000, // 365 days (1 year)
         idleRefreshTokenLifespan: 15552000, // 180 days (6 months)
         httpOnly: false, // Set to true for HTTP-only cookies

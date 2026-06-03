@@ -596,6 +596,10 @@ export interface ApiKeySeatKeySeat extends Struct.CollectionTypeSchema {
       'telemetry.realtime-telemetry',
       false
     >;
+    refundRecords: Schema.Attribute.Component<
+      'telemetry.refund-order-audit',
+      true
+    >;
     telemetry: Schema.Attribute.JSON;
     telemetryHistory: Schema.Attribute.Relation<
       'oneToMany',
@@ -833,6 +837,10 @@ export interface ApiSeatTelemetryHistorySeatTelemetryHistory
     > &
       Schema.Attribute.Private;
     publishedAt: Schema.Attribute.DateTime;
+    refundedRecords: Schema.Attribute.Component<
+      'telemetry.refund-order-audit',
+      true
+    >;
     snapshotType: Schema.Attribute.Enumeration<
       ['realtime', 'hourly', 'daily']
     > &
