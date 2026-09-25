@@ -62,7 +62,11 @@ const socketService = ({ strapi }: { strapi: Core.Strapi }) => {
     machineUUID: string
   ): Promise<boolean> => {
     try {
-      console.log("POS Authentication attempt:", { token, userDocumentId, machineUUID });
+      strapi.log.info("POS Authentication attempt:", { 
+        hasToken: !!token, 
+        userDocumentId, 
+        machineUUID 
+      });
 
       // Find the license by license key
       const license = await strapi.documents('api::license.license').findFirst({
@@ -74,7 +78,10 @@ const socketService = ({ strapi }: { strapi: Core.Strapi }) => {
       });
 
       if (!license) {
-        console.log("License not found or inactive");
+        strapi.log.warn("License not found or inactive", { 
+          hasToken: !!token,
+          tokenLength: token?.length 
+        });
         return false;
       }
 
@@ -82,14 +89,20 @@ const socketService = ({ strapi }: { strapi: Core.Strapi }) => {
       if (license.expirationType === 'expiring' && license.expiresAt) {
         const expirationDate = new Date(license.expiresAt);
         if (expirationDate < new Date()) {
-          console.log("License has expired");
+          strapi.log.warn("License has expired", { 
+            licenseId: license.documentId,
+            expiresAt: license.expiresAt 
+          });
           return false;
         }
       }
 
       // Verify the user owns this license
       if (license.user?.documentId !== userDocumentId) {
-        console.log("User does not own this license");
+        strapi.log.warn("User does not own this license", { 
+          expectedUser: userDocumentId,
+          actualUser: license.user?.documentId 
+        });
         return false;
       }
 
@@ -105,7 +118,10 @@ const socketService = ({ strapi }: { strapi: Core.Strapi }) => {
       });
 
       if (!keySeat) {
-        console.log("Key seat not found or inactive for this machine");
+        strapi.log.warn("Key seat not found or inactive for this machine", { 
+          machineUUID,
+          licenseId: license.documentId 
+        });
         return false;
       }
 
@@ -116,7 +132,7 @@ const socketService = ({ strapi }: { strapi: Core.Strapi }) => {
       socket.machineUUID = machineUUID;
       socket.keySeatDocumentId = keySeat.documentId; // Store for easy access
 
-      console.log("POS authentication successful:", {
+      strapi.log.info("POS authentication successful:", {
         userID: socket.userID,
         machineUUID: socket.machineUUID,
         keySeatId: keySeat.documentId,
@@ -124,7 +140,10 @@ const socketService = ({ strapi }: { strapi: Core.Strapi }) => {
 
       return true;
     } catch (error) {
-      console.error("POS authentication error:", error);
+      strapi.log.error("POS authentication error:", {
+        error: error.message,
+        stack: error.stack
+      });
       return false;
     }
   };
@@ -167,8 +186,24 @@ const socketService = ({ strapi }: { strapi: Core.Strapi }) => {
         if (authenticated) {
           return true;
         }
-        // If POS auth fails, throw error to trigger error emission
-        throw new Error("POS authentication failed");
+        
+        // POS authentication failed - emit specific error with recovery instructions
+        socket.emit(SocketIOErrorEvents.UnauthorizedError, {
+          socketConnected: socket.connected,
+          credentialsExp: true,
+          error: {
+            status: 401,
+            name: "InvalidCredentialsError",
+            message: "Seat credentials not found in database",
+            details: {
+              reason: "SEAT_NOT_FOUND",
+              recoveryAction: "RE_ACTIVATE_REQUIRED",
+              userDocumentId,
+              machineUUID
+            },
+          },
+        });
+        return false;
       } else {
         // Mobile app JWT authentication
         console.log("Attempting JWT authentication");

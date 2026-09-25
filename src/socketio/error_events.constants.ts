@@ -8,5 +8,11 @@ export class SocketIOErrorEvents {
    */
   static readonly UnauthorizedError = "UnauthorizedError";
 
+  /**
+   * Event name for credential reset required errors.
+   * Emitted when stored credentials are no longer valid (e.g., after database reset).
+   */
+  static readonly CredentialResetRequired = "CredentialResetRequired";
+
   // Add more error events here as needed
 }
